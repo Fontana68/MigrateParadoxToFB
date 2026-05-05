@@ -1,4 +1,4 @@
-﻿program MigrateParadoxToFB;
+program MigrateParadoxToFB;
 
 uses
   Vcl.Forms,
@@ -12,7 +12,6 @@ uses
 begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
-  Application.Title := 'Migrate Paradox → Firebird';
   Application.CreateForm(TFormMain, FormMain);
   Application.Run;
 end.

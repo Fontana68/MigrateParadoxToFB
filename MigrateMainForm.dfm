@@ -1,7 +1,7 @@
 object FormMain: TFormMain
   Left = 0
   Top = 0
-  Caption = 'Paradox '#226#8224#8217' Firebird Migration Tool'
+  Caption = 'Paradox -> Firebird Migration Tool'
   ClientHeight = 420
   ClientWidth = 680
   Color = clBtnFace
@@ -37,9 +37,19 @@ object FormMain: TFormMain
     TabOrder = 2
   end
   object FDConnParadox: TFDConnection
+    Params.Strings = (
+      'DriverID=BDE')
     LoginPrompt = False
+    Left = 232
+    Top = 16
   end
   object FDConnFB: TFDConnection
+    Params.Strings = (
+      'DriverID=FB'
+      'User_Name=sysdba'
+      'Password=masterkey')
     LoginPrompt = False
+    Left = 296
+    Top = 16
   end
 end
