@@ -5,7 +5,9 @@ interface
 uses
   Winapi.Windows, System.SysUtils, System.Classes,
   Vcl.Forms, Vcl.StdCtrls, Vcl.CheckLst,
-  FireDAC.Comp.Client, Vcl.Controls;
+  BDE,
+  BDE.DBTables, Vcl.Controls,
+  FireDAC.Stan.Param;
 
 type
   TFormSelectTables = class(TForm)
@@ -21,7 +23,7 @@ type
   private
     FSelectedTables: TStringList;
   public
-    constructor Create(AOwner: TComponent; ConnPX: TFDConnection); reintroduce;
+    constructor Create(AOwner: TComponent; ParadoxDB: TDatabase); reintroduce;
     destructor Destroy; override;
     property SelectedTables: TStringList read FSelectedTables;
   end;
@@ -30,7 +32,7 @@ implementation
 
 {$R *.dfm}
 
-constructor TFormSelectTables.Create(AOwner: TComponent; ConnPX: TFDConnection);
+constructor TFormSelectTables.Create(AOwner: TComponent; ParadoxDB: TDatabase);
 var
   Tables: TStringList;
   T: string;
@@ -40,9 +42,15 @@ begin
   FSelectedTables := TStringList.Create;
   Tables := TStringList.Create;
   try
-    ConnPX.GetTableNames('', '', '', Tables);
+    // RAD Studio 12.3 — firma corretta:
+    // procedure GetTableNames(List: TStrings; SystemTables: Boolean = False);
+    ParadoxDB.GetTableNames(Tables, False);
+
+    // Filtra solo file Paradox .DB
     for T in Tables do
-      CheckListTables.Items.Add(T);
+      if SameText(ExtractFileExt(T), '.DB') then
+        CheckListTables.Items.Add(T);
+
   finally
     Tables.Free;
   end;
@@ -80,3 +88,4 @@ begin
 end;
 
 end.
+
