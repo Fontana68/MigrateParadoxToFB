@@ -48,8 +48,10 @@ begin
 
     // Filtra solo file Paradox .DB
     for T in Tables do
-      if SameText(ExtractFileExt(T), '.DB') then
-        CheckListTables.Items.Add(T);
+      begin
+        //if SameText(ExtractFileExt(T), '.DB') then
+          CheckListTables.Items.Add(T);
+      end;
 
   finally
     Tables.Free;

@@ -10,7 +10,8 @@ uses
   BDE.DBTables,                        // BDE per Paradox
   FireDAC.Comp.Client,                 // FireDAC per Firebird
   FireDAC.Comp.DataSet, FireDAC.Stan.Intf,
-  FireDAC.Stan.Param;
+  FireDAC.Stan.Param,
+  FireDAC.DApt;  // 🔧 aggiungi questa riga
 
 type
   TTableReport = record
