@@ -6,9 +6,8 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
   System.SysUtils, System.Classes, System.StrUtils,
   Vcl.ComCtrls, Vcl.StdCtrls,
-  Data.DB, BDE.DBTables,
-  FireDAC.Comp.Client, FireDAC.Comp.DataSet,
-  FireDAC.Stan.Intf, FireDAC.Stan.Param, FireDAC.DApt;
+  Data.DB, Bde.DBTables,
+  FireDAC.Comp.Client, FireDAC.Comp.DataSet, FireDAC.Stan.Intf, FireDAC.DApt, FireDAC.Stan.Param;
 
 type
   TTableReport = record
@@ -19,6 +18,7 @@ type
     ForeignKeys: TStringList;
     AutoIncFields: TStringList;
     Errors: TStringList;
+    Logs: TStringList; // nuova lista per messaggi diagnostici / info
   end;
 
 procedure RunMigrationSelective(ParadoxDB: TDatabase;
@@ -47,7 +47,7 @@ end;
 function MapFieldTypeToFB(Field: TField): string;
 begin
   case Field.DataType of
-    ftString, ftWideString: Result := 'VARCHAR(' + Field.Size.ToString + ')';
+    ftString, ftWideString: Result := 'VARCHAR(' + IntToStr(Field.Size) + ')';
     ftInteger:              Result := 'INTEGER';
     ftSmallint:             Result := 'SMALLINT';
     ftLargeint:             Result := 'BIGINT';
@@ -143,7 +143,8 @@ begin
   end;
 end;
 
-{----------------------------- EnsureSequenceAndTrigger ------------------------}
+{----------------------------- EnsureSequenceAndTrigger ---------------------}
+
 procedure EnsureSequenceAndTrigger(FBConn: TFDConnection;
   const TableName, FieldName: string; Log: TMemo; var Report: TTableReport);
 var
@@ -174,7 +175,7 @@ begin
         if not FBConn.InTransaction then FBConn.StartTransaction;
         FBConn.ExecSQL('CREATE SEQUENCE ' + SeqName + ';');
         FBConn.Commit;
-        Report.Errors.Add('DEBUG: Sequence creata: ' + SeqName);
+        Report.Logs.Add('Sequence creata: ' + SeqName);
       except
         on E: Exception do
         begin
@@ -185,7 +186,7 @@ begin
       end;
     end
     else
-      Report.Errors.Add('DEBUG: Sequence già esistente: ' + SeqName);
+      Report.Logs.Add('Sequence già esistente: ' + SeqName);
 
     // --- Controllo TRIGGER esistenza ---
     Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$TRIGGERS WHERE RDB$TRIGGER_NAME = :T';
@@ -208,7 +209,7 @@ begin
           'END;'
         );
         FBConn.Commit;
-        Report.Errors.Add('DEBUG: Trigger creato: ' + TrgName);
+        Report.Logs.Add('Trigger creato: ' + TrgName);
       except
         on E: Exception do
         begin
@@ -219,15 +220,15 @@ begin
       end;
     end
     else
-      Report.Errors.Add('DEBUG: Trigger già esistente: ' + TrgName);
+      Report.Logs.Add('Trigger già esistente: ' + TrgName);
 
   finally
     Q.Free;
   end;
 end;
 
-
 {----------------------------- CreateFBTableWithMeta ------------------------}
+
 procedure CreateFBTableWithMeta(const TableName: string;
                                 ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
@@ -305,9 +306,9 @@ begin
 
     SQL.Add(');');
 
-    // --- diagnostica prima di eseguire ---
-    Report.Errors.Add('DEBUG: Preparazione CREATE TABLE per ' + TableName);
-    Report.Errors.Add('DEBUG: SQL = ' + sLineBreak + SQL.Text);
+    // diagnostica
+    Report.Logs.Add('Preparazione CREATE TABLE per ' + TableName);
+    Report.Logs.Add('SQL = ' + sLineBreak + SQL.Text);
 
     // Verifica FBConn
     if not Assigned(FBConn) then
@@ -316,8 +317,8 @@ begin
       Exit;
     end;
 
-    Report.Errors.Add('DEBUG: FBConn.Connected=' + BoolToStr(FBConn.Connected, True));
-    Report.Errors.Add('DEBUG: FBConn.Params.Database=' + FBConn.Params.Values['Database']);
+    Report.Logs.Add('FBConn.Connected=' + BoolToStr(FBConn.Connected, True));
+    Report.Logs.Add('FBConn.Params.Database=' + FBConn.Params.Values['Database']);
 
     // prova ad aprire la connessione se chiusa
     if not FBConn.Connected then
@@ -346,6 +347,7 @@ begin
         FBConn.StartTransaction;
       ExecSQL(FBConn, SQL.Text);
       FBConn.Commit;
+      Report.Logs.Add('CREATE TABLE eseguito per ' + TableName);
     except
       on E: Exception do
       begin
@@ -356,7 +358,7 @@ begin
           // ignora errori rollback
         end;
         Report.Errors.Add(Format('Errore CREATE TABLE %s: %s - %s', [TableName, E.ClassName, E.Message]));
-        Report.Errors.Add('DEBUG: SQL che ha fallito: ' + sLineBreak + SQL.Text);
+        Report.Logs.Add('SQL che ha fallito: ' + sLineBreak + SQL.Text);
         Exit;
       end;
     end;
@@ -375,6 +377,7 @@ begin
       try
         ExecSQL(FBConn, SQL.Text);
         Report.Indices.Add(PX.IndexDefs[I].Name + ' (' + PX.IndexDefs[I].Fields + ')');
+        Report.Logs.Add('CREATE INDEX eseguito: ' + PX.IndexDefs[I].Name);
       except
         on E: Exception do
           Report.Errors.Add('Errore CREATE INDEX ' + PX.IndexDefs[I].Name + ': ' + E.ClassName + ' - ' + E.Message);
@@ -392,7 +395,6 @@ begin
     SQL.Free;
   end;
 end;
-
 
 {----------------------------- CopyData ------------------------------------}
 
@@ -491,6 +493,7 @@ begin
           );
 
           Report.ForeignKeys.Add(FieldName + ' → ' + RefTable);
+          Report.Logs.Add('FK creata: ' + FieldName + ' → ' + RefTable);
         except
           Report.Errors.Add('FK fallita: ' + FieldName + ' → ' + RefTable);
         end;
@@ -505,67 +508,148 @@ begin
 end;
 
 {----------------------------- SaveHTMLReport --------------------------------}
+
 procedure SaveHTMLReport(const FileName: string);
 var
   SL: TStringList;
-  I, J: Integer;
+  i: Integer;
+  rep: TTableReport;
+  function HtmlEncode(const S: string): string;
+  var
+    j: Integer;
+  begin
+    Result := '';
+    for j := 1 to Length(S) do
+      case S[j] of
+        '&': Result := Result + '&amp;';
+        '<': Result := Result + '&lt;';
+        '>': Result := Result + '&gt;';
+        '"': Result := Result + '&quot;';
+        '''': Result := Result + '&#39;';
+        else Result := Result + S[j];
+      end;
+  end;
+  procedure AddTableSection(const R: TTableReport);
+  var
+    k: Integer;
+  begin
+    SL.Add('<h2>' + HtmlEncode(R.TableName) + '</h2>');
+    SL.Add('<table>');
+    SL.Add('<tr><th style="width:200px">Voce</th><th>Valore</th></tr>');
+
+    SL.Add('<tr><td><b>Records copiati</b></td><td>' + IntToStr(R.RecordsCopied) + '</td></tr>');
+    SL.Add('<tr><td><b>Primary Key</b></td><td>' + HtmlEncode(R.PrimaryKey) + '</td></tr>');
+
+    // Indici
+    SL.Add('<tr><td valign="top"><b>Indici</b></td><td>');
+    if (R.Indices <> nil) and (R.Indices.Count > 0) then
+    begin
+      SL.Add('<ul>');
+      for k := 0 to R.Indices.Count - 1 do
+        SL.Add('<li>' + HtmlEncode(R.Indices[k]) + '</li>');
+      SL.Add('</ul>');
+    end
+    else
+      SL.Add('Nessun indice');
+    SL.Add('</td></tr>');
+
+    // Foreign keys
+    SL.Add('<tr><td valign="top"><b>Foreign Keys</b></td><td>');
+    if (R.ForeignKeys <> nil) and (R.ForeignKeys.Count > 0) then
+    begin
+      SL.Add('<ul>');
+      for k := 0 to R.ForeignKeys.Count - 1 do
+        SL.Add('<li>' + HtmlEncode(R.ForeignKeys[k]) + '</li>');
+      SL.Add('</ul>');
+    end
+    else
+      SL.Add('Nessuna foreign key');
+    SL.Add('</td></tr>');
+
+    // AutoInc fields
+    SL.Add('<tr><td valign="top"><b>AutoInc Fields</b></td><td>');
+    if (R.AutoIncFields <> nil) and (R.AutoIncFields.Count > 0) then
+    begin
+      SL.Add('<ul>');
+      for k := 0 to R.AutoIncFields.Count - 1 do
+        SL.Add('<li>' + HtmlEncode(R.AutoIncFields[k]) + '</li>');
+      SL.Add('</ul>');
+    end
+    else
+      SL.Add('Nessun campo autoinc');
+    SL.Add('</td></tr>');
+
+    // Logs
+    SL.Add('<tr><td valign="top"><b>Logs</b></td><td>');
+    if (R.Logs <> nil) and (R.Logs.Count > 0) then
+    begin
+      SL.Add('<pre style="white-space:pre-wrap;margin:0;padding:0;background:#f8f8f8;border:1px solid #eee;">');
+      for k := 0 to R.Logs.Count - 1 do
+        SL.Add(HtmlEncode(R.Logs[k]) + sLineBreak);
+      SL.Add('</pre>');
+    end
+    else
+      SL.Add('Nessun log');
+    SL.Add('</td></tr>');
+
+    // Errors
+    SL.Add('<tr><td valign="top"><b>Errors</b></td><td>');
+    if (R.Errors <> nil) and (R.Errors.Count > 0) then
+    begin
+      SL.Add('<pre class="error" style="white-space:pre-wrap;margin:0;padding:0;background:#fff6f6;border:1px solid #f2c2c2;color:#900;">');
+      for k := 0 to R.Errors.Count - 1 do
+        SL.Add(HtmlEncode(R.Errors[k]) + sLineBreak);
+      SL.Add('</pre>');
+    end
+    else
+      SL.Add('Nessun errore');
+    SL.Add('</td></tr>');
+
+    SL.Add('</table>');
+    SL.Add('<hr/>');
+  end;
+
 begin
   SL := TStringList.Create;
   try
-    SL.Add('<html><head><meta charset="UTF-8">');
+    SL.Add('<!doctype html>');
+    SL.Add('<html><head><meta charset="utf-8">');
+    SL.Add('<title>Migration Report</title>');
     SL.Add('<style>');
-    SL.Add('body { font-family: Segoe UI; margin: 20px; }');
-    SL.Add('table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }');
-    SL.Add('th, td { border: 1px solid #ccc; padding: 8px; }');
-    SL.Add('th { background: #eee; }');
-    SL.Add('.error { color: red; }');
-    SL.Add('</style></head><body>');
-
+    SL.Add('body{font-family:Segoe UI,Arial,Helvetica,sans-serif;margin:20px;color:#222}');
+    SL.Add('h1{font-size:20px}');
+    SL.Add('table{width:100%;border-collapse:collapse;margin-bottom:12px}');
+    SL.Add('th,td{border:1px solid #ddd;padding:8px;vertical-align:top}');
+    SL.Add('th{background:#f0f0f0;text-align:left}');
+    SL.Add('.error{color:#900;font-weight:normal}');
+    SL.Add('pre{font-family:Consolas,monospace;font-size:12px;padding:8px}');
+    SL.Add('</style>');
+    SL.Add('</head><body>');
     SL.Add('<h1>Report Migrazione Paradox → Firebird</h1>');
     SL.Add('<p>Generato il ' + DateTimeToStr(Now) + '</p>');
 
-    for I := 0 to High(ReportList) do
+    // riepilogo generale
+    SL.Add('<h2>Riepilogo tabelle</h2>');
+    SL.Add('<ul>');
+    for i := 0 to Length(ReportList) - 1 do
+      SL.Add('<li>' + HtmlEncode(ReportList[i].TableName) + ' - Records: ' + IntToStr(ReportList[i].RecordsCopied) +
+             ' - Errors: ' + IntToStr(ReportList[i].Errors.Count) + ' - Logs: ' + IntToStr(ReportList[i].Logs.Count) + '</li>');
+    SL.Add('</ul>');
+    SL.Add('<hr/>');
+
+    // dettagli per tabella
+    for i := 0 to Length(ReportList) - 1 do
     begin
-      SL.Add('<h2>Tabella: ' + ReportList[I].TableName + '</h2>');
-      SL.Add('<table>');
-      SL.Add('<tr><th>Campo</th><th>Valore</th></tr>');
-
-      SL.Add('<tr><td>Record copiati</td><td>' +
-             ReportList[I].RecordsCopied.ToString + '</td></tr>');
-      SL.Add('<tr><td>Primary Key</td><td>' +
-             ReportList[I].PrimaryKey + '</td></tr>');
-
-      SL.Add('<tr><td>Indici</td><td><ul>');
-      for J := 0 to ReportList[I].Indices.Count - 1 do
-        SL.Add('<li>' + ReportList[I].Indices[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('<tr><td>Foreign Keys</td><td><ul>');
-      for J := 0 to ReportList[I].ForeignKeys.Count - 1 do
-        SL.Add('<li>' + ReportList[I].ForeignKeys[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('<tr><td>Autoincrement</td><td><ul>');
-      for J := 0 to ReportList[I].AutoIncFields.Count - 1 do
-        SL.Add('<li>' + ReportList[I].AutoIncFields[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('<tr><td>Errori</td><td><ul>');
-      for J := 0 to ReportList[I].Errors.Count - 1 do
-        SL.Add('<li class="error">' + ReportList[I].Errors[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('</table>');
+      rep := ReportList[i];
+      AddTableSection(rep);
     end;
 
     SL.Add('</body></html>');
     SL.SaveToFile(FileName, TEncoding.UTF8);
-
   finally
     SL.Free;
   end;
 end;
-
 
 {----------------------------- RunMigrationSelective ------------------------}
 
@@ -592,6 +676,7 @@ begin
     ReportList[I].ForeignKeys := TStringList.Create;
     ReportList[I].AutoIncFields := TStringList.Create;
     ReportList[I].Errors := TStringList.Create;
+    ReportList[I].Logs := TStringList.Create; // inizializza Logs
 
     Log.Lines.Add('Creazione schema: ' + T);
     CreateFBTableWithMeta(T, ParadoxDB, FBConn, Log, ReportList[I]);
