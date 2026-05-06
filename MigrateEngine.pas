@@ -511,7 +511,7 @@ end;
 procedure SaveHTMLReport(const FileName: string);
 var
   SL: TStringList;
-  i: Integer;
+  i, totalTables, totalErrors, totalLogs: Integer;
   rep: TTableReport;
 
   function HtmlEncode(const S: string): string;
@@ -626,7 +626,7 @@ var
     SL.Add('</td></tr>');
 
     SL.Add('</table>');
-    SL.Add('<p><a href="#top">Torna all\''indice</a></p>');
+    SL.Add('<p><a href="#top">Torna all''indice</a></p>');
     SL.Add('<hr/>');
     SL.Add('</section>');
   end;
@@ -634,6 +634,16 @@ var
 begin
   SL := TStringList.Create;
   try
+    // calcola aggregati
+    totalTables := Length(ReportList);
+    totalErrors := 0;
+    totalLogs := 0;
+    for i := 0 to totalTables - 1 do
+    begin
+      Inc(totalErrors, ReportList[i].Errors.Count);
+      Inc(totalLogs, ReportList[i].Logs.Count);
+    end;
+
     SL.Add('<!doctype html>');
     SL.Add('<html><head><meta charset="utf-8">');
     SL.Add('<title>Migration Report</title>');
@@ -653,11 +663,20 @@ begin
     SL.Add('<h1>Report Migrazione Paradox → Firebird</h1>');
     SL.Add('<p>Generato il ' + DateTimeToStr(Now) + '</p>');
 
-    // riepilogo generale e indice ancorato
+    // sommario aggregato
+    SL.Add('<h2>Sommario aggregato</h2>');
+    SL.Add('<table>');
+    SL.Add('<tr><th style="width:220px">Voce</th><th>Valore</th></tr>');
+    SL.Add('<tr><td><b>Numero tabelle</b></td><td>' + IntToStr(totalTables) + '</td></tr>');
+    SL.Add('<tr><td><b>Totale errori</b></td><td>' + IntToStr(totalErrors) + '</td></tr>');
+    SL.Add('<tr><td><b>Totale log</b></td><td>' + IntToStr(totalLogs) + '</td></tr>');
+    SL.Add('</table>');
+
+    // indice ancorato
     SL.Add('<h2>Indice tabelle</h2>');
     SL.Add('<nav class="toc">');
     SL.Add('<ul>');
-    for i := 0 to Length(ReportList) - 1 do
+    for i := 0 to totalTables - 1 do
       SL.Add('<li><a href="#' + HtmlEncode(SafeId(i, ReportList[i].TableName)) + '">' +
              HtmlEncode(ReportList[i].TableName) + '</a> - Records: ' + IntToStr(ReportList[i].RecordsCopied) +
              ' - Errors: ' + IntToStr(ReportList[i].Errors.Count) + ' - Logs: ' + IntToStr(ReportList[i].Logs.Count) + '</li>');
@@ -666,7 +685,7 @@ begin
     SL.Add('<hr/>');
 
     // dettagli per tabella con ancore
-    for i := 0 to Length(ReportList) - 1 do
+    for i := 0 to totalTables - 1 do
     begin
       rep := ReportList[i];
       AddTableSection(rep, SafeId(i, rep.TableName));
