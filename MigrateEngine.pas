@@ -143,6 +143,90 @@ begin
   end;
 end;
 
+{----------------------------- EnsureSequenceAndTrigger ------------------------}
+procedure EnsureSequenceAndTrigger(FBConn: TFDConnection;
+  const TableName, FieldName: string; Log: TMemo; var Report: TTableReport);
+var
+  SeqName, TrgName, UpTable, UpField: string;
+  Q: TFDQuery;
+  cnt: Integer;
+begin
+  // Firebird memorizza i nomi non quotati in MAIUSCOLO
+  UpTable := UpperCase(TableName);
+  UpField := UpperCase(FieldName);
+  SeqName := UpperCase('GEN_' + TableName + '_' + FieldName);
+  TrgName := UpperCase('BI_' + TableName + '_' + FieldName);
+
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FBConn;
+
+    // --- Controllo SEQUENCE esistenza ---
+    Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$GENERATORS WHERE RDB$GENERATOR_NAME = :G';
+    Q.ParamByName('G').AsString := SeqName;
+    Q.Open;
+    cnt := Q.Fields[0].AsInteger;
+    Q.Close;
+
+    if cnt = 0 then
+    begin
+      try
+        if not FBConn.InTransaction then FBConn.StartTransaction;
+        FBConn.ExecSQL('CREATE SEQUENCE ' + SeqName + ';');
+        FBConn.Commit;
+        Report.Errors.Add('DEBUG: Sequence creata: ' + SeqName);
+      except
+        on E: Exception do
+        begin
+          try if FBConn.InTransaction then FBConn.Rollback; except end;
+          Report.Errors.Add('Errore CREATE SEQUENCE ' + SeqName + ': ' + E.ClassName + ' - ' + E.Message);
+          Exit;
+        end;
+      end;
+    end
+    else
+      Report.Errors.Add('DEBUG: Sequence già esistente: ' + SeqName);
+
+    // --- Controllo TRIGGER esistenza ---
+    Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$TRIGGERS WHERE RDB$TRIGGER_NAME = :T';
+    Q.ParamByName('T').AsString := TrgName;
+    Q.Open;
+    cnt := Q.Fields[0].AsInteger;
+    Q.Close;
+
+    if cnt = 0 then
+    begin
+      try
+        if not FBConn.InTransaction then FBConn.StartTransaction;
+        FBConn.ExecSQL(
+          'CREATE TRIGGER ' + TrgName + ' FOR ' + UpTable + sLineBreak +
+          'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
+          'AS' + sLineBreak +
+          'BEGIN' + sLineBreak +
+          '  IF (NEW.' + UpField + ' IS NULL) THEN' + sLineBreak +
+          '    NEW.' + UpField + ' = NEXT VALUE FOR ' + SeqName + ';' + sLineBreak +
+          'END;'
+        );
+        FBConn.Commit;
+        Report.Errors.Add('DEBUG: Trigger creato: ' + TrgName);
+      except
+        on E: Exception do
+        begin
+          try if FBConn.InTransaction then FBConn.Rollback; except end;
+          Report.Errors.Add('Errore CREATE TRIGGER ' + TrgName + ': ' + E.ClassName + ' - ' + E.Message);
+          Exit;
+        end;
+      end;
+    end
+    else
+      Report.Errors.Add('DEBUG: Trigger già esistente: ' + TrgName);
+
+  finally
+    Q.Free;
+  end;
+end;
+
+
 {----------------------------- CreateFBTableWithMeta ------------------------}
 procedure CreateFBTableWithMeta(const TableName: string;
                                 ParadoxDB: TDatabase;
@@ -297,35 +381,10 @@ begin
       end;
     end;
 
-    // --- crea SEQUENCE e TRIGGER per campi autoinc trovati ---
+    // --- crea SEQUENCE e TRIGGER per campi autoinc trovati (controllo esistenza) ---
     for I := 0 to Report.AutoIncFields.Count - 1 do
     begin
-      SQL.Clear;
-      SQL.Add('CREATE SEQUENCE ' + Ident('GEN_' + TableName + '_' + Report.AutoIncFields[I]) + ';');
-      try
-        ExecSQL(FBConn, SQL.Text);
-      except
-        on E: Exception do
-          Report.Errors.Add('Errore CREATE SEQUENCE: ' + E.ClassName + ' - ' + E.Message);
-      end;
-
-      SQL.Clear;
-      SQL.Add('CREATE TRIGGER ' + Ident('BI_' + TableName + '_' + Report.AutoIncFields[I]));
-      SQL.Add('FOR ' + Ident(TableName));
-      SQL.Add('ACTIVE BEFORE INSERT POSITION 0');
-      SQL.Add('AS');
-      SQL.Add('BEGIN');
-      SQL.Add('  IF (NEW.' + Ident(Report.AutoIncFields[I]) + ' IS NULL) THEN');
-      SQL.Add('    NEW.' + Ident(Report.AutoIncFields[I]) + ' = NEXT VALUE FOR ' +
-              Ident('GEN_' + TableName + '_' + Report.AutoIncFields[I]) + ';');
-      SQL.Add('END;');
-
-      try
-        ExecSQL(FBConn, SQL.Text);
-      except
-        on E: Exception do
-          Report.Errors.Add('Errore CREATE TRIGGER: ' + E.ClassName + ' - ' + E.Message);
-      end;
+      EnsureSequenceAndTrigger(FBConn, TableName, Report.AutoIncFields[I], Log, Report);
     end;
 
   finally
