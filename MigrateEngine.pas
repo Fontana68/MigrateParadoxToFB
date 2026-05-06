@@ -508,12 +508,12 @@ begin
 end;
 
 {----------------------------- SaveHTMLReport --------------------------------}
-
 procedure SaveHTMLReport(const FileName: string);
 var
   SL: TStringList;
   i: Integer;
   rep: TTableReport;
+
   function HtmlEncode(const S: string): string;
   var
     j: Integer;
@@ -526,16 +526,36 @@ var
         '>': Result := Result + '&gt;';
         '"': Result := Result + '&quot;';
         '''': Result := Result + '&#39;';
-        else Result := Result + S[j];
+      else
+        Result := Result + S[j];
       end;
   end;
-  procedure AddTableSection(const R: TTableReport);
+
+  function SafeId(const Index: Integer; const Name: string): string;
+  var
+    tmp: string;
+    k: Integer;
+    ch: Char;
+  begin
+    tmp := Trim(Name);
+    // sostituisci caratteri non alfanumerici con underscore usando CharInSet per evitare W1050
+    for k := 1 to Length(tmp) do
+    begin
+      ch := tmp[k];
+      if not CharInSet(ch, ['0'..'9','A'..'Z','a'..'z']) then
+        tmp[k] := '_';
+    end;
+    Result := 'table_' + IntToStr(Index) + '_' + tmp;
+  end;
+
+  procedure AddTableSection(const R: TTableReport; const Id: string);
   var
     k: Integer;
   begin
+    SL.Add('<section id="' + HtmlEncode(Id) + '">');
     SL.Add('<h2>' + HtmlEncode(R.TableName) + '</h2>');
     SL.Add('<table>');
-    SL.Add('<tr><th style="width:200px">Voce</th><th>Valore</th></tr>');
+    SL.Add('<tr><th style="width:220px">Voce</th><th>Valore</th></tr>');
 
     SL.Add('<tr><td><b>Records copiati</b></td><td>' + IntToStr(R.RecordsCopied) + '</td></tr>');
     SL.Add('<tr><td><b>Primary Key</b></td><td>' + HtmlEncode(R.PrimaryKey) + '</td></tr>');
@@ -583,7 +603,7 @@ var
     SL.Add('<tr><td valign="top"><b>Logs</b></td><td>');
     if (R.Logs <> nil) and (R.Logs.Count > 0) then
     begin
-      SL.Add('<pre style="white-space:pre-wrap;margin:0;padding:0;background:#f8f8f8;border:1px solid #eee;">');
+      SL.Add('<pre style="white-space:pre-wrap;margin:0;padding:8px;background:#f8f8f8;border:1px solid #eee;">');
       for k := 0 to R.Logs.Count - 1 do
         SL.Add(HtmlEncode(R.Logs[k]) + sLineBreak);
       SL.Add('</pre>');
@@ -596,7 +616,7 @@ var
     SL.Add('<tr><td valign="top"><b>Errors</b></td><td>');
     if (R.Errors <> nil) and (R.Errors.Count > 0) then
     begin
-      SL.Add('<pre class="error" style="white-space:pre-wrap;margin:0;padding:0;background:#fff6f6;border:1px solid #f2c2c2;color:#900;">');
+      SL.Add('<pre class="error" style="white-space:pre-wrap;margin:0;padding:8px;background:#fff6f6;border:1px solid #f2c2c2;color:#900;">');
       for k := 0 to R.Errors.Count - 1 do
         SL.Add(HtmlEncode(R.Errors[k]) + sLineBreak);
       SL.Add('</pre>');
@@ -606,7 +626,9 @@ var
     SL.Add('</td></tr>');
 
     SL.Add('</table>');
+    SL.Add('<p><a href="#top">Torna all\''indice</a></p>');
     SL.Add('<hr/>');
+    SL.Add('</section>');
   end;
 
 begin
@@ -623,25 +645,31 @@ begin
     SL.Add('th{background:#f0f0f0;text-align:left}');
     SL.Add('.error{color:#900;font-weight:normal}');
     SL.Add('pre{font-family:Consolas,monospace;font-size:12px;padding:8px}');
+    SL.Add('nav.toc{background:#fafafa;border:1px solid #eee;padding:12px;margin-bottom:16px}');
+    SL.Add('nav.toc ul{margin:0;padding-left:18px}');
     SL.Add('</style>');
     SL.Add('</head><body>');
+    SL.Add('<a id="top"></a>');
     SL.Add('<h1>Report Migrazione Paradox → Firebird</h1>');
     SL.Add('<p>Generato il ' + DateTimeToStr(Now) + '</p>');
 
-    // riepilogo generale
-    SL.Add('<h2>Riepilogo tabelle</h2>');
+    // riepilogo generale e indice ancorato
+    SL.Add('<h2>Indice tabelle</h2>');
+    SL.Add('<nav class="toc">');
     SL.Add('<ul>');
     for i := 0 to Length(ReportList) - 1 do
-      SL.Add('<li>' + HtmlEncode(ReportList[i].TableName) + ' - Records: ' + IntToStr(ReportList[i].RecordsCopied) +
+      SL.Add('<li><a href="#' + HtmlEncode(SafeId(i, ReportList[i].TableName)) + '">' +
+             HtmlEncode(ReportList[i].TableName) + '</a> - Records: ' + IntToStr(ReportList[i].RecordsCopied) +
              ' - Errors: ' + IntToStr(ReportList[i].Errors.Count) + ' - Logs: ' + IntToStr(ReportList[i].Logs.Count) + '</li>');
     SL.Add('</ul>');
+    SL.Add('</nav>');
     SL.Add('<hr/>');
 
-    // dettagli per tabella
+    // dettagli per tabella con ancore
     for i := 0 to Length(ReportList) - 1 do
     begin
       rep := ReportList[i];
-      AddTableSection(rep);
+      AddTableSection(rep, SafeId(i, rep.TableName));
     end;
 
     SL.Add('</body></html>');
@@ -650,6 +678,7 @@ begin
     SL.Free;
   end;
 end;
+
 
 {----------------------------- RunMigrationSelective ------------------------}
 
