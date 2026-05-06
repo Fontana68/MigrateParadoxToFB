@@ -47,9 +47,18 @@ object FormMain: TFormMain
     Params.Strings = (
       'DriverID=FB'
       'User_Name=sysdba'
-      'Password=masterkey')
+      'CharacterSet=UTF8'
+      
+        'Database=C:\SW\BuilderC\Progetti\SW800\PumpBDE\MigrateParadoxToF' +
+        'B\Source\Win32\Debug\FB\MOT.FDB'
+      'PageSize=8192')
     LoginPrompt = False
-    Left = 296
-    Top = 16
+    Left = 448
+    Top = 8
+  end
+  object FDPhysFBDriverLink1: TFDPhysFBDriverLink
+    Embedded = True
+    Left = 392
+    Top = 8
   end
 end

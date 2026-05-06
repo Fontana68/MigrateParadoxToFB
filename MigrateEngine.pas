@@ -144,7 +144,6 @@ begin
 end;
 
 {----------------------------- CreateFBTableWithMeta ------------------------}
-
 procedure CreateFBTableWithMeta(const TableName: string;
                                 ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
@@ -156,12 +155,28 @@ var
   I: Integer;
   Field: TField;
   PKFields: string;
+  UseQuotedIdentifiers: Boolean;
+
+  // helper locale per identificatori (con o senza doppi apici)
+  function Ident(const S: string): string;
+  begin
+    if UseQuotedIdentifiers then
+      Result := '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
+    else
+      Result := S; // Firebird converte non-quoted in MAIUSCOLO
+  end;
+
 begin
+  UseQuotedIdentifiers := False; // metti True se vuoi forzare "Client","ID_CLIENT" ecc.
+
   PX := TTable.Create(nil);
   SQL := TStringList.Create;
   try
+    // Imposta TTable per la tabella Paradox
     PX.DatabaseName := ParadoxDB.DatabaseName;
     PX.TableName := TableName;
+
+    // Aggiorna metadati e apri la tabella; se fallisce, logga e esci
     try
       PX.IndexDefs.Update;
       PX.FieldDefs.Update;
@@ -169,12 +184,14 @@ begin
     except
       on E: Exception do
       begin
-        Report.Errors.Add('Errore apertura tabella ' + TableName + ': ' + E.Message);
+        Report.Errors.Add('Errore apertura tabella Paradox ' + TableName + ': ' + E.ClassName + ' - ' + E.Message);
         Exit;
       end;
     end;
 
-    SQL.Add('CREATE TABLE ' + FBIdent(TableName) + ' (');
+    // Costruzione CREATE TABLE
+    SQL.Clear;
+    SQL.Add('CREATE TABLE ' + Ident(TableName) + ' (');
 
     PKFields := '';
 
@@ -182,80 +199,132 @@ begin
     begin
       Field := PX.Fields[I];
 
+      // registra campi autoinc trovati
       if Field.DataType = ftAutoInc then
         Report.AutoIncFields.Add(Field.FieldName);
 
-      SQL.Add('  ' + FBIdent(Field.FieldName) + ' ' + MapFieldTypeToFB(Field) +
+      // aggiungi definizione campo
+      SQL.Add('  ' + Ident(Field.FieldName) + ' ' + MapFieldTypeToFB(Field) +
               IfThen(I < PX.FieldCount - 1, ',', ''));
 
-      // usa la funzione robusta per verificare PK
+      // verifica se il campo è parte della PK (usando la funzione robusta FieldIsPrimary)
       if FieldIsPrimary(PX, Field.FieldName, Log) then
       begin
         if PKFields <> '' then PKFields := PKFields + ',';
-        PKFields := PKFields + FBIdent(Field.FieldName);
+        PKFields := PKFields + Ident(Field.FieldName);
       end;
     end;
 
+    // aggiungi constraint PK se presente
     if PKFields <> '' then
-      SQL.Add(', CONSTRAINT PK_' + FBIdent(TableName) + ' PRIMARY KEY (' + PKFields + ')');
+      SQL.Add(', CONSTRAINT ' + Ident('PK_' + TableName) + ' PRIMARY KEY (' + PKFields + ')');
 
     SQL.Add(');');
 
-    try
-      ExecSQL(FBConn, SQL.Text);
-    except
-      on E: Exception do
-        Report.Errors.Add('Errore CREATE TABLE ' + TableName + ': ' + E.Message);
+    // --- diagnostica prima di eseguire ---
+    Report.Errors.Add('DEBUG: Preparazione CREATE TABLE per ' + TableName);
+    Report.Errors.Add('DEBUG: SQL = ' + sLineBreak + SQL.Text);
+
+    // Verifica FBConn
+    if not Assigned(FBConn) then
+    begin
+      Report.Errors.Add('FBConn non assegnata per CREATE TABLE ' + TableName);
+      Exit;
     end;
 
-    // Indici secondari
+    Report.Errors.Add('DEBUG: FBConn.Connected=' + BoolToStr(FBConn.Connected, True));
+    Report.Errors.Add('DEBUG: FBConn.Params.Database=' + FBConn.Params.Values['Database']);
+
+    // prova ad aprire la connessione se chiusa
+    if not FBConn.Connected then
+    begin
+      try
+        FBConn.Connected := True;
+      except
+        on E: Exception do
+        begin
+          Report.Errors.Add('Impossibile connettersi a Firebird: ' + E.ClassName + ' - ' + E.Message);
+          Exit;
+        end;
+      end;
+    end;
+
+    // Opzionale: se vuoi eliminare la tabella esistente prima di creare, decommenta
+    try
+      ExecSQL(FBConn, 'DROP TABLE ' + Ident(TableName) + ';');
+    except
+      // ignora errori di DROP (es. tabella non esiste)
+    end;
+
+    // Esegui DDL in transazione con logging dettagliato
+    try
+      if not FBConn.InTransaction then
+        FBConn.StartTransaction;
+      ExecSQL(FBConn, SQL.Text);
+      FBConn.Commit;
+    except
+      on E: Exception do
+      begin
+        try
+          if FBConn.InTransaction then
+            FBConn.Rollback;
+        except
+          // ignora errori rollback
+        end;
+        Report.Errors.Add(Format('Errore CREATE TABLE %s: %s - %s', [TableName, E.ClassName, E.Message]));
+        Report.Errors.Add('DEBUG: SQL che ha fallito: ' + sLineBreak + SQL.Text);
+        Exit;
+      end;
+    end;
+
+    // --- crea indici secondari (non primari) ---
     for I := 0 to PX.IndexDefs.Count - 1 do
     begin
       if (ixPrimary in PX.IndexDefs[I].Options) then Continue;
       if PX.IndexDefs[I].Fields = '' then Continue;
 
       SQL.Clear;
-      SQL.Add('CREATE INDEX IX_' + FBIdent(TableName) + '_' +
-              FBIdent(PX.IndexDefs[I].Name) + ' ON ' + FBIdent(TableName) +
-              ' (' + StringReplace(PX.IndexDefs[I].Fields, ';', ',', [rfReplaceAll]) + ');');
+      SQL.Add('CREATE INDEX ' + Ident('IX_' + TableName + '_' + PX.IndexDefs[I].Name) +
+              ' ON ' + Ident(TableName) + ' (' +
+              StringReplace(PX.IndexDefs[I].Fields, ';', ',', [rfReplaceAll]) + ');');
 
       try
         ExecSQL(FBConn, SQL.Text);
         Report.Indices.Add(PX.IndexDefs[I].Name + ' (' + PX.IndexDefs[I].Fields + ')');
       except
         on E: Exception do
-          Report.Errors.Add('Errore CREATE INDEX ' + PX.IndexDefs[I].Name + ': ' + E.Message);
+          Report.Errors.Add('Errore CREATE INDEX ' + PX.IndexDefs[I].Name + ': ' + E.ClassName + ' - ' + E.Message);
       end;
     end;
 
-    // Se ci sono campi autoincrement, crea sequence e trigger
+    // --- crea SEQUENCE e TRIGGER per campi autoinc trovati ---
     for I := 0 to Report.AutoIncFields.Count - 1 do
     begin
       SQL.Clear;
-      SQL.Add('CREATE SEQUENCE GEN_' + FBIdent(TableName) + '_' + FBIdent(Report.AutoIncFields[I]) + ';');
+      SQL.Add('CREATE SEQUENCE ' + Ident('GEN_' + TableName + '_' + Report.AutoIncFields[I]) + ';');
       try
         ExecSQL(FBConn, SQL.Text);
       except
         on E: Exception do
-          Report.Errors.Add('Errore CREATE SEQUENCE: ' + E.Message);
+          Report.Errors.Add('Errore CREATE SEQUENCE: ' + E.ClassName + ' - ' + E.Message);
       end;
 
       SQL.Clear;
-      SQL.Add('CREATE TRIGGER BI_' + FBIdent(TableName) + '_' + FBIdent(Report.AutoIncFields[I]));
-      SQL.Add('FOR ' + FBIdent(TableName));
+      SQL.Add('CREATE TRIGGER ' + Ident('BI_' + TableName + '_' + Report.AutoIncFields[I]));
+      SQL.Add('FOR ' + Ident(TableName));
       SQL.Add('ACTIVE BEFORE INSERT POSITION 0');
       SQL.Add('AS');
       SQL.Add('BEGIN');
-      SQL.Add('  IF (NEW.' + FBIdent(Report.AutoIncFields[I]) + ' IS NULL) THEN');
-      SQL.Add('    NEW.' + FBIdent(Report.AutoIncFields[I]) + ' = NEXT VALUE FOR GEN_' +
-              FBIdent(TableName) + '_' + FBIdent(Report.AutoIncFields[I]) + ';');
+      SQL.Add('  IF (NEW.' + Ident(Report.AutoIncFields[I]) + ' IS NULL) THEN');
+      SQL.Add('    NEW.' + Ident(Report.AutoIncFields[I]) + ' = NEXT VALUE FOR ' +
+              Ident('GEN_' + TableName + '_' + Report.AutoIncFields[I]) + ';');
       SQL.Add('END;');
 
       try
         ExecSQL(FBConn, SQL.Text);
       except
         on E: Exception do
-          Report.Errors.Add('Errore CREATE TRIGGER: ' + E.Message);
+          Report.Errors.Add('Errore CREATE TRIGGER: ' + E.ClassName + ' - ' + E.Message);
       end;
     end;
 
@@ -264,6 +333,7 @@ begin
     SQL.Free;
   end;
 end;
+
 
 {----------------------------- CopyData ------------------------------------}
 
@@ -376,24 +446,67 @@ begin
 end;
 
 {----------------------------- SaveHTMLReport --------------------------------}
-
 procedure SaveHTMLReport(const FileName: string);
 var
   SL: TStringList;
+  I, J: Integer;
 begin
   SL := TStringList.Create;
   try
     SL.Add('<html><head><meta charset="UTF-8">');
-    SL.Add('<style>body{font-family:Segoe UI;margin:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px}th{background:#eee}.error{color:red}</style>');
-    SL.Add('</head><body>');
+    SL.Add('<style>');
+    SL.Add('body { font-family: Segoe UI; margin: 20px; }');
+    SL.Add('table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }');
+    SL.Add('th, td { border: 1px solid #ccc; padding: 8px; }');
+    SL.Add('th { background: #eee; }');
+    SL.Add('.error { color: red; }');
+    SL.Add('</style></head><body>');
+
     SL.Add('<h1>Report Migrazione Paradox → Firebird</h1>');
     SL.Add('<p>Generato il ' + DateTimeToStr(Now) + '</p>');
+
+    for I := 0 to High(ReportList) do
+    begin
+      SL.Add('<h2>Tabella: ' + ReportList[I].TableName + '</h2>');
+      SL.Add('<table>');
+      SL.Add('<tr><th>Campo</th><th>Valore</th></tr>');
+
+      SL.Add('<tr><td>Record copiati</td><td>' +
+             ReportList[I].RecordsCopied.ToString + '</td></tr>');
+      SL.Add('<tr><td>Primary Key</td><td>' +
+             ReportList[I].PrimaryKey + '</td></tr>');
+
+      SL.Add('<tr><td>Indici</td><td><ul>');
+      for J := 0 to ReportList[I].Indices.Count - 1 do
+        SL.Add('<li>' + ReportList[I].Indices[J] + '</li>');
+      SL.Add('</ul></td></tr>');
+
+      SL.Add('<tr><td>Foreign Keys</td><td><ul>');
+      for J := 0 to ReportList[I].ForeignKeys.Count - 1 do
+        SL.Add('<li>' + ReportList[I].ForeignKeys[J] + '</li>');
+      SL.Add('</ul></td></tr>');
+
+      SL.Add('<tr><td>Autoincrement</td><td><ul>');
+      for J := 0 to ReportList[I].AutoIncFields.Count - 1 do
+        SL.Add('<li>' + ReportList[I].AutoIncFields[J] + '</li>');
+      SL.Add('</ul></td></tr>');
+
+      SL.Add('<tr><td>Errori</td><td><ul>');
+      for J := 0 to ReportList[I].Errors.Count - 1 do
+        SL.Add('<li class="error">' + ReportList[I].Errors[J] + '</li>');
+      SL.Add('</ul></td></tr>');
+
+      SL.Add('</table>');
+    end;
+
     SL.Add('</body></html>');
     SL.SaveToFile(FileName, TEncoding.UTF8);
+
   finally
     SL.Free;
   end;
 end;
+
 
 {----------------------------- RunMigrationSelective ------------------------}
 
