@@ -50,15 +50,8 @@ begin
   Root := ExtractFilePath(Application.ExeName);
   PXPath := Root + 'Paradox';
 
-  //FDConnection1.Params.Clear;
-  //FDConnection1.Params.Add('DriverID=FB');
-  //FDConnection1.Params.Add('Database=' + ExtractFilePath(ParamStr(0)) + 'data\myapp.fdb');
-  //FDConnection1.Params.Add('User_Name=sysdba');
-  //FDConnection1.Params.Add('Password=masterkey');
-  //FDConnection1.Params.Add('CharacterSet=UTF8');
-  //FDConnection1.Connected := True;
 
-// -----------------------------
+  // -----------------------------
   // 1) BDE NATIVO PER PARADOX
   // -----------------------------
   FParadoxDB := TDatabase.Create(Self);
@@ -82,8 +75,11 @@ begin
   // 2) FIREBIRD VIA FIREDAC
   // -----------------------------
 
-  FDPhysFBDriverLink1.VendorLib := ExtractFilePath(ParamStr(0)) + 'FB\fbclient.dll';
-  // oppure fbclient.dll, in base al package embedded che distribuisci
+  // --- Driver Link ---
+  FDPhysFBDriverLink1.VendorHome  := ExtractFilePath(ParamStr(0)) + 'FB';
+  FDPhysFBDriverLink1.VendorLib   := 'fbclient.dll';
+  //FDPhysFBDriverLink1.VendorLib   := ExtractFilePath(ParamStr(0)) + 'FB\fbclient.dll';
+  FDPhysFBDriverLink1.Embedded    := True;  // Modalità embedded!
 
   FDConnFB.Params.Clear;
   FDConnFB.Params.Add('DriverID=FB');
@@ -91,8 +87,8 @@ begin
   FDConnFB.Params.Add('CharacterSet=UTF8');
   FDConnFB.Params.Add('User_Name=sysdba');
   FDConnFB.Params.Add('Password=');
-  //FDConnFB.Params.Add('Server=Embedded');  // -> emit exception database unavailable
-  FDConnFB.Params.Add('Protocol=Local');   // -> emit exception database unavailable
+  FDConnFB.Params.Add('Server=');       // -> emit exception database unavailable
+  FDConnFB.Params.Add('Protocol=Local');
   FDConnFB.Params.Add('PageSize=8192');
 
   FDConnFB.DriverName := 'FB';
