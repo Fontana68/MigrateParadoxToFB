@@ -6,12 +6,9 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
   System.SysUtils, System.Classes, System.StrUtils,
   Vcl.ComCtrls, Vcl.StdCtrls,
-  Data.DB,
-  BDE.DBTables,                        // BDE per Paradox
-  FireDAC.Comp.Client,                 // FireDAC per Firebird
-  FireDAC.Comp.DataSet, FireDAC.Stan.Intf,
-  FireDAC.Stan.Param,
-  FireDAC.DApt;  // 🔧 aggiungi questa riga
+  Data.DB, BDE.DBTables,
+  FireDAC.Comp.Client, FireDAC.Comp.DataSet,
+  FireDAC.Stan.Intf, FireDAC.Stan.Param, FireDAC.DApt;
 
 type
   TTableReport = record
@@ -35,9 +32,7 @@ implementation
 var
   ReportList: array of TTableReport;
 
-{------------------------------------------------------------------------------}
-{  UTILITY }
-{------------------------------------------------------------------------------}
+{----------------------------- utilities ------------------------------------}
 
 procedure ExecSQL(const Conn: TFDConnection; const SQL: string);
 begin
@@ -61,8 +56,7 @@ begin
     ftBCD, ftFMTBcd:        Result := 'NUMERIC(18,4)';
     ftDate:                 Result := 'DATE';
     ftTime:                 Result := 'TIME';
-    ftDateTime,
-    ftTimeStamp:            Result := 'TIMESTAMP';
+    ftDateTime, ftTimeStamp:Result := 'TIMESTAMP';
     ftMemo, ftWideMemo:     Result := 'BLOB SUB_TYPE TEXT';
     ftBlob:                 Result := 'BLOB';
     ftAutoInc:              Result := 'INTEGER';
@@ -71,15 +65,91 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------}
-{  CREA TABELLA FIREBIRD DA METADATI PARADOX }
-{------------------------------------------------------------------------------}
+function NormalizeIndexFields(const S: string): TStringList;
+var
+  tmp: string;
+  parts: TArray<string>;
+  i: Integer;
+begin
+  Result := TStringList.Create;
+  tmp := StringReplace(S, ';', ',', [rfReplaceAll]);
+  tmp := StringReplace(tmp, ' ', '', [rfReplaceAll]);
+  if tmp = '' then Exit;
+  parts := tmp.Split([',']);
+  for i := 0 to Length(parts) - 1 do
+    if parts[i] <> '' then
+      Result.Add(UpperCase(parts[i]));
+end;
+
+function FieldIsPrimary(PX: TTable; const AFieldName: string; Log: TMemo): Boolean;
+var
+  i, j: Integer;
+  idxDef: TIndexDef;
+  fieldsList: TStringList;
+  fName: string;
+begin
+  Result := False;
+  if (PX = nil) or (AFieldName = '') then Exit;
+
+  try
+    PX.IndexDefs.Update;
+  except
+    // se Update fallisce, logga e esci
+    if Assigned(Log) then Log.Lines.Add('Warning: IndexDefs.Update failed for ' + PX.TableName);
+    Exit;
+  end;
+
+  for i := 0 to PX.IndexDefs.Count - 1 do
+  begin
+    idxDef := PX.IndexDefs[i];
+    if idxDef = nil then Continue;
+
+    // solo indici marcati come primari
+    if not (ixPrimary in idxDef.Options) then Continue;
+
+    fieldsList := NormalizeIndexFields(idxDef.Fields);
+    try
+      for j := 0 to fieldsList.Count - 1 do
+      begin
+        fName := fieldsList[j];
+        if SameText(fName, UpperCase(AFieldName)) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+    finally
+      fieldsList.Free;
+    end;
+  end;
+
+  // fallback: campo chiamato ID o che termina con _ID
+  if not Result then
+    if SameText(AFieldName, 'ID') or AnsiEndsText('_ID', AFieldName) then
+      Result := True;
+end;
+
+function MakeParamList(Count: Integer): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  if Count <= 0 then Exit;
+  for i := 1 to Count do
+  begin
+    Result := Result + ':p' + IntToStr(i);
+    if i < Count then
+      Result := Result + ',';
+  end;
+end;
+
+{----------------------------- CreateFBTableWithMeta ------------------------}
 
 procedure CreateFBTableWithMeta(const TableName: string;
                                 ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
                                 Log: TMemo;
-                                Report: TTableReport);
+                                var Report: TTableReport);
 var
   PX: TTable;
   SQL: TStringList;
@@ -92,9 +162,17 @@ begin
   try
     PX.DatabaseName := ParadoxDB.DatabaseName;
     PX.TableName := TableName;
-    PX.IndexDefs.Update;
-    PX.FieldDefs.Update;
-    PX.Open;
+    try
+      PX.IndexDefs.Update;
+      PX.FieldDefs.Update;
+      PX.Open;
+    except
+      on E: Exception do
+      begin
+        Report.Errors.Add('Errore apertura tabella ' + TableName + ': ' + E.Message);
+        Exit;
+      end;
+    end;
 
     SQL.Add('CREATE TABLE ' + FBIdent(TableName) + ' (');
 
@@ -110,24 +188,27 @@ begin
       SQL.Add('  ' + FBIdent(Field.FieldName) + ' ' + MapFieldTypeToFB(Field) +
               IfThen(I < PX.FieldCount - 1, ',', ''));
 
-      if (ixPrimary in PX.IndexDefs.GetIndexForFields(Field.FieldName, False).Options) then
+      // usa la funzione robusta per verificare PK
+      if FieldIsPrimary(PX, Field.FieldName, Log) then
       begin
         if PKFields <> '' then PKFields := PKFields + ',';
         PKFields := PKFields + FBIdent(Field.FieldName);
       end;
     end;
 
-    Report.PrimaryKey := PKFields;
-
     if PKFields <> '' then
-      SQL.Add(', CONSTRAINT PK_' + FBIdent(TableName) +
-              ' PRIMARY KEY (' + PKFields + ')');
+      SQL.Add(', CONSTRAINT PK_' + FBIdent(TableName) + ' PRIMARY KEY (' + PKFields + ')');
 
     SQL.Add(');');
 
-    ExecSQL(FBConn, SQL.Text);
+    try
+      ExecSQL(FBConn, SQL.Text);
+    except
+      on E: Exception do
+        Report.Errors.Add('Errore CREATE TABLE ' + TableName + ': ' + E.Message);
+    end;
 
-    { Indici secondari }
+    // Indici secondari
     for I := 0 to PX.IndexDefs.Count - 1 do
     begin
       if (ixPrimary in PX.IndexDefs[I].Options) then Continue;
@@ -138,76 +219,109 @@ begin
               FBIdent(PX.IndexDefs[I].Name) + ' ON ' + FBIdent(TableName) +
               ' (' + StringReplace(PX.IndexDefs[I].Fields, ';', ',', [rfReplaceAll]) + ');');
 
-      ExecSQL(FBConn, SQL.Text);
-      Report.Indices.Add(PX.IndexDefs[I].Name + ' (' + PX.IndexDefs[I].Fields + ')');
+      try
+        ExecSQL(FBConn, SQL.Text);
+        Report.Indices.Add(PX.IndexDefs[I].Name + ' (' + PX.IndexDefs[I].Fields + ')');
+      except
+        on E: Exception do
+          Report.Errors.Add('Errore CREATE INDEX ' + PX.IndexDefs[I].Name + ': ' + E.Message);
+      end;
     end;
 
-  except
-    on E: Exception do
-      Report.Errors.Add(E.Message);
-  end;
+    // Se ci sono campi autoincrement, crea sequence e trigger
+    for I := 0 to Report.AutoIncFields.Count - 1 do
+    begin
+      SQL.Clear;
+      SQL.Add('CREATE SEQUENCE GEN_' + FBIdent(TableName) + '_' + FBIdent(Report.AutoIncFields[I]) + ';');
+      try
+        ExecSQL(FBConn, SQL.Text);
+      except
+        on E: Exception do
+          Report.Errors.Add('Errore CREATE SEQUENCE: ' + E.Message);
+      end;
 
-  PX.Free;
-  SQL.Free;
+      SQL.Clear;
+      SQL.Add('CREATE TRIGGER BI_' + FBIdent(TableName) + '_' + FBIdent(Report.AutoIncFields[I]));
+      SQL.Add('FOR ' + FBIdent(TableName));
+      SQL.Add('ACTIVE BEFORE INSERT POSITION 0');
+      SQL.Add('AS');
+      SQL.Add('BEGIN');
+      SQL.Add('  IF (NEW.' + FBIdent(Report.AutoIncFields[I]) + ' IS NULL) THEN');
+      SQL.Add('    NEW.' + FBIdent(Report.AutoIncFields[I]) + ' = NEXT VALUE FOR GEN_' +
+              FBIdent(TableName) + '_' + FBIdent(Report.AutoIncFields[I]) + ';');
+      SQL.Add('END;');
+
+      try
+        ExecSQL(FBConn, SQL.Text);
+      except
+        on E: Exception do
+          Report.Errors.Add('Errore CREATE TRIGGER: ' + E.Message);
+      end;
+    end;
+
+  finally
+    PX.Free;
+    SQL.Free;
+  end;
 end;
 
-function MakeParamList(Count: Integer): string;
-var
-  i: Integer;
-begin
-  Result := '';
-  for i := 1 to Count do
-  begin
-    Result := Result + '?,';
-  end;
-  Result := Copy(Result, 1, Length(Result)-1); // rimuove ultima virgola
-end;
-
-
-{------------------------------------------------------------------------------}
-{  COPIA DATI PARADOX → FIREBIRD }
-{------------------------------------------------------------------------------}
+{----------------------------- CopyData ------------------------------------}
 
 procedure CopyData(const TableName: string;
                    ParadoxDB: TDatabase;
                    FBConn: TFDConnection;
                    Log: TMemo;
-                   Report: TTableReport);
+                   var Report: TTableReport);
 var
   PX: TTable;
   FBQuery: TFDQuery;
   I: Integer;
+  paramName: string;
 begin
   PX := TTable.Create(nil);
   FBQuery := TFDQuery.Create(nil);
   try
     PX.DatabaseName := ParadoxDB.DatabaseName;
     PX.TableName := TableName;
-    PX.Open;
+    try
+      PX.Open;
+    except
+      on E: Exception do
+      begin
+        Report.Errors.Add('Errore apertura tabella per copia ' + TableName + ': ' + E.Message);
+        Exit;
+      end;
+    end;
 
     FBQuery.Connection := FBConn;
-
-  FBQuery.SQL.Text :=
-      'INSERT INTO ' + FBIdent(TableName) +
-      ' VALUES (' + MakeParamList(PX.FieldCount) + ')';
+    FBQuery.SQL.Text := 'INSERT INTO ' + FBIdent(TableName) + ' VALUES (' + MakeParamList(PX.FieldCount) + ')';
+    FBQuery.Prepare;
 
     while not PX.Eof do
     begin
-      FBQuery.Params.Clear;
-      for I := 0 to PX.FieldCount - 1 do
-        FBQuery.Params.Add.Value := PX.Fields[I].Value;
-
       try
+        // assegna parametri per nome :p1, :p2, ...
+        for I := 0 to PX.FieldCount - 1 do
+        begin
+          paramName := 'p' + IntToStr(I + 1);
+          FBQuery.ParamByName(paramName).Value := PX.Fields[I].Value;
+        end;
+
         FBQuery.ExecSQL;
       except
         on E: Exception do
-          Report.Errors.Add(E.Message);
+          Report.Errors.Add('Errore inserimento in ' + TableName + ': ' + E.Message);
       end;
 
       PX.Next;
     end;
 
-    Report.RecordsCopied := PX.RecordCount;
+    // RecordCount può essere costoso su alcune tabelle; usiamo il valore corrente
+    try
+      Report.RecordsCopied := PX.RecordCount;
+    except
+      Report.RecordsCopied := 0;
+    end;
 
   finally
     PX.Free;
@@ -215,14 +329,12 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------}
-{  FOREIGN KEY EURISTICA }
-{------------------------------------------------------------------------------}
+{----------------------------- Foreign keys heuristic ----------------------}
 
 procedure CreateForeignKeysHeuristic(const TableName: string;
                                      FBConn: TFDConnection;
                                      Log: TMemo;
-                                     Report: TTableReport);
+                                     var Report: TTableReport);
 var
   Q: TFDQuery;
   FieldName, RefTable: string;
@@ -230,9 +342,7 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FBConn;
-    Q.SQL.Text :=
-      'SELECT RDB$FIELD_NAME FROM RDB$RELATION_FIELDS ' +
-      'WHERE RDB$RELATION_NAME = :T';
+    Q.SQL.Text := 'SELECT RDB$FIELD_NAME FROM RDB$RELATION_FIELDS WHERE RDB$RELATION_NAME = :T';
     Q.ParamByName('T').AsString := UpperCase(TableName);
     Q.Open;
 
@@ -248,12 +358,10 @@ begin
           FBConn.ExecSQL(
             'ALTER TABLE ' + FBIdent(TableName) +
             ' ADD CONSTRAINT FK_' + FBIdent(TableName) + '_' + FBIdent(FieldName) +
-            ' FOREIGN KEY (' + FBIdent(FieldName) + ') REFERENCES ' +
-            FBIdent(RefTable) + '(ID);'
+            ' FOREIGN KEY (' + FBIdent(FieldName) + ') REFERENCES ' + FBIdent(RefTable) + '(ID);'
           );
 
           Report.ForeignKeys.Add(FieldName + ' → ' + RefTable);
-
         except
           Report.Errors.Add('FK fallita: ' + FieldName + ' → ' + RefTable);
         end;
@@ -267,74 +375,27 @@ begin
   end;
 end;
 
-{------------------------------------------------------------------------------}
-{  SALVA REPORT HTML }
-{------------------------------------------------------------------------------}
+{----------------------------- SaveHTMLReport --------------------------------}
 
 procedure SaveHTMLReport(const FileName: string);
 var
   SL: TStringList;
-  I, J: Integer;
 begin
   SL := TStringList.Create;
   try
     SL.Add('<html><head><meta charset="UTF-8">');
-    SL.Add('<style>');
-    SL.Add('body { font-family: Segoe UI; margin: 20px; }');
-    SL.Add('table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }');
-    SL.Add('th, td { border: 1px solid #ccc; padding: 8px; }');
-    SL.Add('th { background: #eee; }');
-    SL.Add('.error { color: red; }');
-    SL.Add('</style></head><body>');
-
+    SL.Add('<style>body{font-family:Segoe UI;margin:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px}th{background:#eee}.error{color:red}</style>');
+    SL.Add('</head><body>');
     SL.Add('<h1>Report Migrazione Paradox → Firebird</h1>');
     SL.Add('<p>Generato il ' + DateTimeToStr(Now) + '</p>');
-
-    for I := 0 to High(ReportList) do
-    begin
-      SL.Add('<h2>Tabella: ' + ReportList[I].TableName + '</h2>');
-      SL.Add('<table>');
-      SL.Add('<tr><th>Campo</th><th>Valore</th></tr>');
-
-      SL.Add('<tr><td>Record copiati</td><td>' +
-             ReportList[I].RecordsCopied.ToString + '</td></tr>');
-      SL.Add('<tr><td>Primary Key</td><td>' +
-             ReportList[I].PrimaryKey + '</td></tr>');
-
-      SL.Add('<tr><td>Indici</td><td><ul>');
-      for J := 0 to ReportList[I].Indices.Count - 1 do
-        SL.Add('<li>' + ReportList[I].Indices[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('<tr><td>Foreign Keys</td><td><ul>');
-      for J := 0 to ReportList[I].ForeignKeys.Count - 1 do
-        SL.Add('<li>' + ReportList[I].ForeignKeys[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('<tr><td>Autoincrement</td><td><ul>');
-      for J := 0 to ReportList[I].AutoIncFields.Count - 1 do
-        SL.Add('<li>' + ReportList[I].AutoIncFields[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('<tr><td>Errori</td><td><ul>');
-      for J := 0 to ReportList[I].Errors.Count - 1 do
-        SL.Add('<li class="error">' + ReportList[I].Errors[J] + '</li>');
-      SL.Add('</ul></td></tr>');
-
-      SL.Add('</table>');
-    end;
-
     SL.Add('</body></html>');
     SL.SaveToFile(FileName, TEncoding.UTF8);
-
   finally
     SL.Free;
   end;
 end;
 
-{------------------------------------------------------------------------------}
-{  MAIN }
-{------------------------------------------------------------------------------}
+{----------------------------- RunMigrationSelective ------------------------}
 
 procedure RunMigrationSelective(ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
