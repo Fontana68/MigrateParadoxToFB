@@ -29,10 +29,105 @@ procedure RunMigrationSelective(ParadoxDB: TDatabase;
 
 implementation
 
+uses
+  Variants, DateUtils;
+
 var
   ReportList: array of TTableReport;
 
 {----------------------------- utilities ------------------------------------}
+
+
+function IsParadoxInvalidDateStr(const S: string): Boolean;
+var
+  t: string;
+begin
+  t := Trim(S);
+  if t = '' then
+    Exit(True);
+  // controlli comuni
+  if (t = '00/00/0000') or (t = '0000-00-00') or (t = '00-00-0000') or (t = '00.00.0000') then
+    Exit(True);
+  // altri formati non convertibili saranno gestiti dal TryStrToDate
+  Result := False;
+end;
+
+// Ritorna Variant: Null se invalida, altrimenti TDateTime
+function ParadoxFieldToDateTimeVariant(Field: TField): Variant;
+var
+  s: string;
+  dt: TDateTime;
+  FS: TFormatSettings;
+begin
+  Result := Null;
+  if Field = nil then Exit;
+  if Field.IsNull then Exit;
+
+  // leggi come stringa per essere permissivi
+  s := Trim(Field.AsString);
+  if IsParadoxInvalidDateStr(s) then
+    Exit; // Null
+
+  // prova parsing con formati locali (adatta se Paradox usa dd/mm/yyyy)
+  FS := TFormatSettings.Create;
+  FS.DateSeparator := '/';
+  FS.ShortDateFormat := 'dd/MM/yyyy';
+
+  // prova parsing diretto
+  if TryStrToDateTime(s, dt, FS) then
+  begin
+    Result := dt;
+    Exit;
+  end;
+
+  // prova altri formati comuni
+  FS.DateSeparator := '-';
+  FS.ShortDateFormat := 'yyyy-MM-dd';
+  if TryStrToDateTime(s, dt, FS) then
+  begin
+    Result := dt;
+    Exit;
+  end;
+
+  // fallback: prova conversione numerica (alcuni Paradox memorizzano date come numeri)
+  try
+    dt := Field.AsDateTime;
+    Result := dt;
+  except
+    Result := Null;
+  end;
+end;
+
+procedure PreScanInvalidDates(const TableName: string; ParadoxDB: TDatabase; Log: TMemo; var Report: TTableReport);
+var
+  PX: TTable;
+  I: Integer;
+  s: string;
+begin
+  PX := TTable.Create(nil);
+  try
+    PX.DatabaseName := ParadoxDB.DatabaseName;
+    PX.TableName := TableName;
+    PX.Open;
+    while not PX.Eof do
+    begin
+      for I := 0 to PX.FieldCount - 1 do
+      begin
+        if PX.Fields[I].DataType in [ftDate, ftDateTime, ftTimeStamp] then
+        begin
+          s := Trim(PX.Fields[I].AsString);
+          if IsParadoxInvalidDateStr(s) then
+            Report.Logs.Add(Format('Invalid date in %s.%s: "%s" (RecNo=%d)', [TableName, PX.Fields[I].FieldName, s, PX.RecNo]));
+        end;
+      end;
+      PX.Next;
+    end;
+  finally
+    PX.Free;
+  end;
+end;
+
+
 
 procedure ExecSQL(const Conn: TFDConnection; const SQL: string);
 begin
@@ -333,14 +428,14 @@ begin
         end;
       end;
     end;
-
+(*
     // Opzionale: se vuoi eliminare la tabella esistente prima di creare, decommenta
     try
       ExecSQL(FBConn, 'DROP TABLE ' + Ident(TableName) + ';');
     except
       // ignora errori di DROP (es. tabella non esiste)
     end;
-
+*)
     // Esegui DDL in transazione con logging dettagliato
     try
       if not FBConn.InTransaction then
@@ -408,6 +503,8 @@ var
   FBQuery: TFDQuery;
   I: Integer;
   paramName: string;
+  v: Variant;
+
 begin
   PX := TTable.Create(nil);
   FBQuery := TFDQuery.Create(nil);
@@ -430,18 +527,32 @@ begin
 
     while not PX.Eof do
     begin
-      try
-        // assegna parametri per nome :p1, :p2, ...
-        for I := 0 to PX.FieldCount - 1 do
-        begin
-          paramName := 'p' + IntToStr(I + 1);
-          FBQuery.ParamByName(paramName).Value := PX.Fields[I].Value;
+      for I := 0 to PX.FieldCount - 1 do
+      begin
+        paramName := 'p' + IntToStr(I + 1);
+        try
+          case PX.Fields[I].DataType of
+            ftDate, ftDateTime, ftTimeStamp:
+              begin
+                // converte e restituisce Null se invalida
+                v := ParadoxFieldToDateTimeVariant(PX.Fields[I]);
+                if VarIsNull(v) then
+                  FBQuery.ParamByName(paramName).Clear
+                else
+                  FBQuery.ParamByName(paramName).AsDateTime := v;
+              end;
+            else
+              FBQuery.ParamByName(paramName).Value := PX.Fields[I].Value;
+          end;
+        except
+          on E: Exception do
+          begin
+            // logga l'errore e la riga problematica
+            Report.Errors.Add(Format('Errore assegnazione campo %s in tabella %s: %s', [PX.Fields[I].FieldName, TableName, E.Message]));
+            Report.Logs.Add('Riga problematica: ' + PX.Fields[I].AsString);
+            FBQuery.ParamByName(paramName).Clear; // evita crash successivi
+          end;
         end;
-
-        FBQuery.ExecSQL;
-      except
-        on E: Exception do
-          Report.Errors.Add('Errore inserimento in ' + TableName + ': ' + E.Message);
       end;
 
       PX.Next;
@@ -725,6 +836,9 @@ begin
     ReportList[I].AutoIncFields := TStringList.Create;
     ReportList[I].Errors := TStringList.Create;
     ReportList[I].Logs := TStringList.Create; // inizializza Logs
+
+    // controlla date invalide
+    PreScanInvalidDates(T, ParadoxDB, Log, ReportList[I]);
 
     Log.Lines.Add('Creazione schema: ' + T);
     CreateFBTableWithMeta(T, ParadoxDB, FBConn, Log, ReportList[I]);
