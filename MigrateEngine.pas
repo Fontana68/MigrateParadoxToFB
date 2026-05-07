@@ -634,6 +634,12 @@ begin
     end;
   end;
 
+    // Assicura che SeqName contenga il nome reale della sequence
+  if existsSeq then
+    SeqName := foundSeqName
+  else
+    SeqName := SeqBase;
+
   // se manca il trigger, crealo con nome canonico (UPPERCASE non quoted)
   if not existsTrg then
   begin
