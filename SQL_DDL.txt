@@ -3,7 +3,6 @@
 
 CONNECT "C:/SW/BuilderC/Progetti/SW800/PumpBDE/MigrateParadoxToFB/Source/Win32/Debug/FB/MOT.FDB" USER 'SYSDBA';
 
-
 python fb_migration_tests_firebird_driver.py --database "C:\SW\BuilderC\Progetti\SW800\PumpBDE\MigrateParadoxToFB\Source\Win32\Debug\FB\MOT.FDB" --user SYSDBA --out results.json
 
 isql -user SYSDBA -password masterkey /path/to/mydb.fdb

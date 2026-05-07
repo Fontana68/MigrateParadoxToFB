@@ -12,14 +12,12 @@
         "GEN_CLIENT_ID_CLIENT": true
       },
       "triggers": {
-        "BI_CLIENT_ID_CLIENT": false
+        "BI_CLIENT_ID_CLIENT": true
       },
       "fk_violations": [],
-      "status": "FAIL",
+      "status": "PASS",
       "details": [],
-      "fail_reasons": [
-        "Missing trigger BI_CLIENT_ID_CLIENT"
-      ]
+      "fail_reasons": []
     },
     "CLIENTBRAKE": {
       "exists": true,
@@ -59,14 +57,12 @@
         "GEN_Client_ID_CLIENT": true
       },
       "triggers": {
-        "BI_Client_ID_CLIENT": false
+        "BI_Client_ID_CLIENT": true
       },
       "fk_violations": [],
-      "status": "FAIL",
+      "status": "PASS",
       "details": [],
-      "fail_reasons": [
-        "Missing trigger BI_Client_ID_CLIENT"
-      ]
+      "fail_reasons": []
     },
     "ClientBrake": {
       "exists": true,
@@ -128,14 +124,12 @@
         "GEN_REVBRAKE_ID_REVISION": true
       },
       "triggers": {
-        "BI_REVBRAKE_ID_REVISION": false
+        "BI_REVBRAKE_ID_REVISION": true
       },
       "fk_violations": [],
-      "status": "FAIL",
+      "status": "PASS",
       "details": [],
-      "fail_reasons": [
-        "Missing trigger BI_REVBRAKE_ID_REVISION"
-      ]
+      "fail_reasons": []
     },
     "REVDIESEL": {
       "exists": true,
@@ -145,14 +139,12 @@
         "GEN_REVDIESEL_ID_REVISION": true
       },
       "triggers": {
-        "BI_REVDIESEL_ID_REVISION": false
+        "BI_REVDIESEL_ID_REVISION": true
       },
       "fk_violations": [],
-      "status": "FAIL",
+      "status": "PASS",
       "details": [],
-      "fail_reasons": [
-        "Missing trigger BI_REVDIESEL_ID_REVISION"
-      ]
+      "fail_reasons": []
     },
     "REVISION": {
       "exists": true,
@@ -162,14 +154,12 @@
         "GEN_REVISION_ID_REVISION": true
       },
       "triggers": {
-        "BI_REVISION_ID_REVISION": false
+        "BI_REVISION_ID_REVISION": true
       },
       "fk_violations": [],
-      "status": "FAIL",
+      "status": "PASS",
       "details": [],
-      "fail_reasons": [
-        "Missing trigger BI_REVISION_ID_REVISION"
-      ]
+      "fail_reasons": []
     },
     "REVLIMITS": {
       "exists": true,
@@ -342,8 +332,8 @@
   },
   "summary": {
     "total_tables": 23,
-    "tables_passed": 18,
-    "tables_failed": 5,
-    "total_fail_reasons": 5
+    "tables_passed": 23,
+    "tables_failed": 0,
+    "total_fail_reasons": 0
   }
 }
