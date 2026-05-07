@@ -6,6 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
   System.SysUtils, System.Classes, System.StrUtils,
   System.RegularExpressions,
+  System.IOUtils,
   Vcl.ComCtrls, Vcl.StdCtrls,
   Data.DB, Bde.DBTables,
   FireDAC.Comp.Client, FireDAC.Comp.DataSet, FireDAC.Stan.Intf, FireDAC.DApt, FireDAC.Stan.Param;
@@ -45,7 +46,67 @@ const
 var
   ReportList: array of TTableReport;
 
-{----------------------------- utilities ------------------------------------}
+ {-----------------------------------------------------------------}
+  function CleanDDL(const RawSQL: string; out Trimmed: Boolean): string;
+  var
+    // pattern: cattura tutto fino all'ultimo END che termina una statement
+    // (?s) = dot matches newline; catturiamo il più lungo possibile fino a END seguito da optional ; e spazi fino a fine stringa
+    // useremo una ricerca per l'ultima occorrenza di '\bEND\b'
+    iLastEnd, iPos: Integer;
+    s: string;
+  begin
+    Trimmed := False;
+    s := RawSQL;
+
+    // Normalizza CRLF
+    s := StringReplace(s, #13#10, #10, [rfReplaceAll]);
+    s := StringReplace(s, #13, #10, [rfReplaceAll]);
+
+    // Trova l'ultima parola END (case-insensitive)
+    iLastEnd := 0;
+    iPos := 1;
+    while True do
+    begin
+      iPos := TRegEx.Match(s, '\bEND\b', [roIgnoreCase]).Index;
+      if iPos = 0 then Break;
+      iLastEnd := iPos;
+      Inc(iPos); // continua la ricerca
+    end;
+
+    if iLastEnd = 0 then
+    begin
+      // nessun END trovato: ritorna la stringa originale (ma logga)
+      Result := RawSQL;
+      Exit;
+    end;
+
+    // estrai dalla posizione dell'END fino alla fine della parola END
+    // trova la fine della parola END (posizione + length('END') - 1)
+    var endPos := iLastEnd + Length('END') - 1;
+
+    // dopo END può esserci spazio e un optional ';' — includili
+    var j := endPos + 1;
+    while (j <= Length(s)) and (CharInSet(s[j], [#9, #10, #13, ' ', ';'])) do
+      Inc(j);
+
+    // j ora punta al primo carattere dopo END e eventuale ; e spazi
+    // se j <= Length(s) allora c'è contenuto extra: tagliamo
+    if j <= Length(s) then
+    begin
+      Result := TrimRight(Copy(s, 1, j - 1)); // mantieni fino a END (+ ;/spazi)
+      Trimmed := True;
+    end
+    else
+    begin
+      Result := TrimRight(s);
+      Trimmed := False;
+    end;
+
+    // ripristina CRLF standard Windows se vuoi
+    Result := StringReplace(Result, #10, sLineBreak, [rfReplaceAll]);
+  end;
+
+  {----------------------------- utilities ------------------------------------}
 
 {-----------------------------------------------------------------}
 function IsSqlKeyword(const S: string): Boolean;
@@ -394,50 +455,66 @@ var
     end;
   end;
 
-procedure CreateSequence(const Conn: TFDConnection; const Name: string);
-begin
-  try
-    // NON aggiungere il punto e virgola finale quando si esegue via API
-    ExecSQL(Conn, 'CREATE SEQUENCE ' + Name);
-    Report.Logs.Add('CREATE SEQUENCE eseguito: ' + Name);
-  except
-    on E: Exception do
-    begin
-      Report.Errors.Add(Format('Errore CREATE SEQUENCE %s: %s - %s', [Name, E.ClassName, E.Message]));
-      raise;
+  procedure CreateSequence(const Conn: TFDConnection; const Name: string);
+  begin
+    try
+      // NON aggiungere il punto e virgola finale quando si esegue via API
+      ExecSQL(Conn, 'CREATE SEQUENCE ' + Name);
+      Report.Logs.Add('CREATE SEQUENCE eseguito: ' + Name);
+    except
+      on E: Exception do
+      begin
+        Report.Errors.Add(Format('Errore CREATE SEQUENCE %s: %s - %s', [Name, E.ClassName, E.Message]));
+        raise;
+      end;
     end;
   end;
-end;
 
-procedure CreateTriggerBI(const Conn: TFDConnection; const Trg, Tbl, Fld, Seq: string);
-var
-  s: string;
-begin
-  // Costruisci il corpo del trigger senza terminatore finale ';'
-  // e senza terminatori superflui. Usa Ident per tabella/campo.
-  s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak +
-       'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
-       'AS' + sLineBreak +
-       'BEGIN' + sLineBreak +
-       '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak +
-       '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + sLineBreak +
-       'END'; // NO semicolon finale
+  procedure CreateTriggerBI(const Conn: TFDConnection; const Trg, Tbl, Fld, Seq: string);
+  var
+    s: string;
+    wasTrimmed: Boolean;
+    outFile: string;
+  begin
+    // Costruisci il corpo del trigger senza terminatore finale ';'
+    // e senza terminatori superflui. Usa Ident per tabella/campo.
+    s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak +
+         'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
+         'AS' + sLineBreak +
+         'BEGIN' + sLineBreak +
+         '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak +
+         '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + ';' + sLineBreak +
+         'END'; // NO semicolon finale
 
-  // Logga il DDL esatto per debug
-  Report.Logs.Add('DDL CREATE TRIGGER per ' + Tbl + '.' + Fld + ':' + sLineBreak + s);
+    // pulizia robusta
+    s := CleanDDL(s, wasTrimmed);
+    if wasTrimmed then
+      Report.Logs.Add('CleanDDL ha rimosso contenuto extra dal DDL del trigger per ' + Tbl + '.' + Fld);
 
-  try
-    ExecSQL(Conn, s);
-    Report.Logs.Add('CREATE TRIGGER eseguito: ' + Trg + ' FOR ' + Tbl + '.' + Fld);
-  except
-    on E: Exception do
-    begin
-      Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
-      // rilancia per far emergere l'errore se vuoi interrompere il flusso
-      raise;
+// log completo delimitato (molto utile)
+  Report.Logs.Add('---BEGIN CREATE TRIGGER DDL---');
+  Report.Logs.Add(s);
+  Report.Logs.Add('---END CREATE TRIGGER DDL---');
+
+    try
+      ExecSQL(Conn, s);
+      Report.Logs.Add('CREATE TRIGGER eseguito: ' + Trg + ' FOR ' + Tbl + '.' + Fld);
+    except
+      on E: Exception do
+      begin
+       Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
+      // salva DDL fallito su file per analisi
+      outFile := TPath.Combine(ExtractFilePath(ParamStr(0)), 'DDL_Failed_' + Trg + '.sql');
+      try
+        TFile.WriteAllText(outFile, s, TEncoding.UTF8);
+        Report.Logs.Add('DDL fallito salvato in: ' + outFile);
+      except
+        Report.Logs.Add('Impossibile salvare DDL fallito su file: ' + outFile);
+      end;
+      raise; // rilancia per far emergere l'errore a livello superiore
+      end;
     end;
   end;
-end;
 
 begin
   if not Assigned(FBConn) then
@@ -506,7 +583,6 @@ begin
   else
     Report.Errors.Add(Format('Trigger mancante dopo tentativo di creazione per %s.%s (atteso %s)', [TableName, FieldName, TrgBase]));
 end;
-
 
 
 
