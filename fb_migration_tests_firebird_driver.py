@@ -71,7 +71,10 @@ def table_checksum(conn, table: str, sample_limit: int = None) -> str:
     if not cols:
         cur.close()
         return ''
-    col_list = ','.join(cols)
+    # col_list = ','.join(cols)
+    # dopo aver ottenuto cols
+    col_list = ','.join([f'"{c}"' for c in cols])   # QUOTE ogni nome di colonna
+
     sql = f"SELECT {col_list} FROM {table}"
     if sample_limit and isinstance(sample_limit, int):
         sql = f"SELECT FIRST {sample_limit} {col_list} FROM {table}"
@@ -195,13 +198,24 @@ def run_tests(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "summary": {}
     }
     conn = None
+
+    # With this block:
     try:
+        # firebird-driver accepts 'database' (path) and optional host/port
         conn = connect(
-            dsn=cfg["database"],
+            database=cfg["database"],
             user=cfg.get("user", "SYSDBA"),
             password=cfg.get("password", ""),
             charset=cfg.get("charset", "UTF8")
         )
+    except TypeError:
+        # fallback for older/newer API variants: try positional connect via URL-like string
+        try:
+            # Example: 'localhost:/path/to/db.fdb' or '/absolute/path/to/db.fdb'
+            conn = connect(cfg["database"], cfg.get("user", "SYSDBA"), cfg.get("password", ""))
+        except Exception as e:
+            out["error"] = f"Connection failed (fallback): {str(e)}"
+            return out
     except Exception as e:
         out["error"] = f"Connection failed: {str(e)}"
         return out

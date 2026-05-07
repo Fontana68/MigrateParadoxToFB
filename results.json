@@ -1,0 +1,349 @@
+{
+  "connection": {
+    "database": "C:\\SW\\BuilderC\\Progetti\\SW800\\PumpBDE\\MigrateParadoxToFB\\Source\\Win32\\Debug\\FB\\MOT.FDB",
+    "user": "SYSDBA"
+  },
+  "tables": {
+    "CLIENT": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_CLIENT_ID_CLIENT": true
+      },
+      "triggers": {
+        "BI_CLIENT_ID_CLIENT": false
+      },
+      "fk_violations": [],
+      "status": "FAIL",
+      "details": [],
+      "fail_reasons": [
+        "Missing trigger BI_CLIENT_ID_CLIENT"
+      ]
+    },
+    "CLIENTBRAKE": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_CLIENTBRAKE_ID_CLIENT": true
+      },
+      "triggers": {
+        "BI_CLIENTBRAKE_ID_CLIENT": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "CLIENTDIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_CLIENTDIESEL_ID_CLIENT": true
+      },
+      "triggers": {
+        "BI_CLIENTDIESEL_ID_CLIENT": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "Client": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_Client_ID_CLIENT": true
+      },
+      "triggers": {
+        "BI_Client_ID_CLIENT": false
+      },
+      "fk_violations": [],
+      "status": "FAIL",
+      "details": [],
+      "fail_reasons": [
+        "Missing trigger BI_Client_ID_CLIENT"
+      ]
+    },
+    "ClientBrake": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_ClientBrake_ID_CLIENT": true
+      },
+      "triggers": {
+        "BI_ClientBrake_ID_CLIENT": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "KMDIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {},
+      "triggers": {},
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "OPERATOR": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_OPERATOR_ID_OPERATOR": true
+      },
+      "triggers": {
+        "BI_OPERATOR_ID_OPERATOR": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "PLATEDIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {},
+      "triggers": {},
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "REVBRAKE": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_REVBRAKE_ID_REVISION": true
+      },
+      "triggers": {
+        "BI_REVBRAKE_ID_REVISION": false
+      },
+      "fk_violations": [],
+      "status": "FAIL",
+      "details": [],
+      "fail_reasons": [
+        "Missing trigger BI_REVBRAKE_ID_REVISION"
+      ]
+    },
+    "REVDIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_REVDIESEL_ID_REVISION": true
+      },
+      "triggers": {
+        "BI_REVDIESEL_ID_REVISION": false
+      },
+      "fk_violations": [],
+      "status": "FAIL",
+      "details": [],
+      "fail_reasons": [
+        "Missing trigger BI_REVDIESEL_ID_REVISION"
+      ]
+    },
+    "REVISION": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_REVISION_ID_REVISION": true
+      },
+      "triggers": {
+        "BI_REVISION_ID_REVISION": false
+      },
+      "fk_violations": [],
+      "status": "FAIL",
+      "details": [],
+      "fail_reasons": [
+        "Missing trigger BI_REVISION_ID_REVISION"
+      ]
+    },
+    "REVLIMITS": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {},
+      "triggers": {},
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "RIS2BRAKE": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_RIS2BRAKE_ID_BRAKE2": true
+      },
+      "triggers": {
+        "BI_RIS2BRAKE_ID_BRAKE2": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "RISBETCAT": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_RISBETCAT_ID_BETCAT": true
+      },
+      "triggers": {
+        "BI_RISBETCAT_ID_BETCAT": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "RISBRAKE": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_RISBRAKE_ID_BRAKE": true
+      },
+      "triggers": {
+        "BI_RISBRAKE_ID_BRAKE": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "RISDIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_RISDIESEL_ID_DIESEL": true
+      },
+      "triggers": {
+        "BI_RISDIESEL_ID_DIESEL": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "RISNCATVIS": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_RISNCATVIS_ID_NCATVIS": true
+      },
+      "triggers": {
+        "BI_RISNCATVIS_ID_NCATVIS": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "RisBrake": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_RisBrake_ID_BRAKE": true
+      },
+      "triggers": {
+        "BI_RisBrake_ID_BRAKE": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "USED08DIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {},
+      "triggers": {},
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "USED14DIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {},
+      "triggers": {},
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "VEHBRAKE": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_VEHBRAKE_ID_VEHICLE": true
+      },
+      "triggers": {
+        "BI_VEHBRAKE_ID_VEHICLE": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "VEHDIESEL": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_VEHDIESEL_ID_VEHICLE": true
+      },
+      "triggers": {
+        "BI_VEHDIESEL_ID_VEHICLE": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    },
+    "VEHICLE": {
+      "exists": true,
+      "row_count": 0,
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+      "sequences": {
+        "GEN_VEHICLE_ID_VEHICLE": true
+      },
+      "triggers": {
+        "BI_VEHICLE_ID_VEHICLE": true
+      },
+      "fk_violations": [],
+      "status": "PASS",
+      "details": [],
+      "fail_reasons": []
+    }
+  },
+  "summary": {
+    "total_tables": 23,
+    "tables_passed": 18,
+    "tables_failed": 5,
+    "total_fail_reasons": 5
+  }
+}

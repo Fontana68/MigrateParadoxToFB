@@ -33,11 +33,87 @@ implementation
 uses
   Variants, DateUtils;
 
+const
+  // elenco minimale di keyword SQL/Firebird; estendi se necessario
+  SQL_KEYWORDS: array[0..28] of string = (
+    'DATE','TIME','TIMESTAMP','USER','PASSWORD','ORDER','GROUP','SELECT',
+    'INSERT','UPDATE','DELETE','TABLE','INDEX','CONSTRAINT','PRIMARY',
+    'KEY','TRIGGER','GENERATOR','SEQUENCE','VALUES','FROM','WHERE','AND',
+    'OR','NOT','NULL','LIKE','IN','BETWEEN'
+  );
+
 var
   ReportList: array of TTableReport;
 
 {----------------------------- utilities ------------------------------------}
 
+{-----------------------------------------------------------------}
+function IsSqlKeyword(const S: string): Boolean;
+var
+  i: Integer;
+begin
+  for i := Low(SQL_KEYWORDS) to High(SQL_KEYWORDS) do
+    if SameText(S, SQL_KEYWORDS[i]) then
+      Exit(True);
+  Result := False;
+end;
+
+{-----------------------------------------------------------------}
+function NeedsQuoting(const S: string): Boolean;
+begin
+  // vuoto -> quotare
+  if S = '' then
+    Exit(True);
+
+  // se non è composto solo da lettere, numeri o underscore -> quotare
+  if not TRegEx.IsMatch(S, '^[A-Za-z0-9_]+$') then
+    Exit(True);
+
+  // se inizia con numero -> quotare (per sicurezza)
+  if CharInSet(S[1], ['0'..'9']) then
+    Exit(True);
+
+  // se è keyword SQL -> quotare
+  if IsSqlKeyword(S) then
+    Exit(True);
+
+  Result := False;
+end;
+
+{-----------------------------------------------------------------}
+function Ident(const S: string): string;
+var
+  tmp: string;
+begin
+  tmp := Trim(S);
+  if NeedsQuoting(tmp) then
+  begin
+    // raddoppia eventuali doppi apici interni
+    tmp := StringReplace(tmp, '"', '""', [rfReplaceAll]);
+    Result := '"' + tmp + '"';
+  end
+  else
+    Result := tmp;
+end;
+(*
+function Ident(const S: string): string;
+var
+  tmp: string;
+begin
+  tmp := S;
+  // se contiene caratteri non alfanumerici o è keyword, quotalo
+  if (tmp = '') or (not TRegEx.IsMatch(tmp, '^[A-Za-z0-9_]+$')) or IsSqlKeyword(tmp) then
+  begin
+    // raddoppia eventuali doppi apici interni
+    tmp := StringReplace(tmp, '"', '""', [rfReplaceAll]);
+    Result := '"' + tmp + '"';
+  end
+  else
+    Result := tmp; // nome semplice, non quoted
+end;
+*)
+
+{-----------------------------------------------------------------}
 function IsParadoxInvalidDateStr(const S: string): Boolean;
 var
   t: string;
@@ -244,124 +320,187 @@ begin
   end;
 end;
 
+// controlla esistenza generator provando varianti
+function GeneratorExists(Q: TFDQuery; const Name: string): Boolean;
+begin
+  Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$GENERATORS WHERE RDB$GENERATOR_NAME = :G';
+  Q.ParamByName('G').AsString := Name;
+  Q.Open; Result := Q.Fields[0].AsInteger > 0; Q.Close;
+end;
+
+// usa GeneratorExists(Q, SeqName) e GeneratorExists(Q, '"' + SeqName + '"') per coprire i casi
+
+
 {----------------------------- EnsureSequenceAndTrigger ---------------------}
 procedure EnsureSequenceAndTrigger(FBConn: TFDConnection;
   const TableName, FieldName: string; Log: TMemo; var Report: TTableReport);
 var
-  SeqName, TrgName, UpTable, UpField: string;
+  SeqBase, TrgBase: string;
+  SeqName, TrgName: string;
   Q: TFDQuery;
-  cnt: Integer;
-begin
-  // Firebird memorizza i nomi non quotati in MAIUSCOLO
-  UpTable := UpperCase(TableName);
-  UpField := UpperCase(FieldName);
-  SeqName := UpperCase('GEN_' + TableName + '_' + FieldName);
-  TrgName := UpperCase('BI_' + TableName + '_' + FieldName);
+  existsSeq, existsTrg: Boolean;
+  foundSeqName, foundTrgName: string;
 
-  Q := TFDQuery.Create(nil);
-  try
-    Q.Connection := FBConn;
-
-    // --- Controllo SEQUENCE esistenza ---
-    Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$GENERATORS WHERE RDB$GENERATOR_NAME = :G';
-    Q.ParamByName('G').AsString := SeqName;
-    Q.Open;
-    cnt := Q.Fields[0].AsInteger;
-    Q.Close;
-
-    if cnt = 0 then
-    begin
-      try
-        if not FBConn.InTransaction then FBConn.StartTransaction;
-        FBConn.ExecSQL('CREATE SEQUENCE ' + SeqName + ';');
-        FBConn.Commit;
-        Report.Logs.Add('Sequence creata: ' + SeqName);
-      except
-        on E: Exception do
-        begin
-          try if FBConn.InTransaction then FBConn.Rollback; except end;
-          Report.Errors.Add('Errore CREATE SEQUENCE ' + SeqName + ': ' + E.ClassName + ' - ' + E.Message);
-          Exit;
-        end;
-      end;
-    end
-    else
-      Report.Logs.Add('Sequence già esistente: ' + SeqName);
-
-    // --- Controllo TRIGGER esistenza ---
-    Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$TRIGGERS WHERE RDB$TRIGGER_NAME = :T';
-    Q.ParamByName('T').AsString := TrgName;
-    Q.Open;
-    cnt := Q.Fields[0].AsInteger;
-    Q.Close;
-
-    if cnt = 0 then
-    begin
-      try
-        if not FBConn.InTransaction then FBConn.StartTransaction;
-        FBConn.ExecSQL(
-          'CREATE TRIGGER ' + TrgName + ' FOR ' + UpTable + sLineBreak +
-          'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
-          'AS' + sLineBreak +
-          'BEGIN' + sLineBreak +
-          '  IF (NEW.' + UpField + ' IS NULL) THEN' + sLineBreak +
-          '    NEW.' + UpField + ' = NEXT VALUE FOR ' + SeqName + ';' + sLineBreak +
-          'END;'
-        );
-        FBConn.Commit;
-        Report.Logs.Add('Trigger creato: ' + TrgName);
-      except
-        on E: Exception do
-        begin
-          try if FBConn.InTransaction then FBConn.Rollback; except end;
-          Report.Errors.Add('Errore CREATE TRIGGER ' + TrgName + ': ' + E.ClassName + ' - ' + E.Message);
-          Exit;
-        end;
-      end;
-    end
-    else
-      Report.Logs.Add('Trigger già esistente: ' + TrgName);
-
-  finally
-    Q.Free;
-  end;
-end;
-
-{-----------------------------------------------------------------}
-function IsSqlKeyword(const S: string): Boolean;
-const
-  // elenco ridotto ma efficace di keyword Firebird/SQL comuni
-  Keywords: array[0..28] of string = (
-    'DATE','TIME','TIMESTAMP','USER','PASSWORD','ORDER','GROUP','SELECT',
-    'INSERT','UPDATE','DELETE','TABLE','INDEX','CONSTRAINT','PRIMARY',
-    'KEY','TRIGGER','GENERATOR','SEQUENCE','VALUES','FROM','WHERE','AND',
-    'OR','NOT','NULL','LIKE','IN','BETWEEN'
-  );
-var
-  i: Integer;
-begin
-  for i := Low(Keywords) to High(Keywords) do
-    if SameText(S, Keywords[i]) then
-      Exit(True);
-  Result := False;
-end;
-
-{-----------------------------------------------------------------}
-function Ident(const S: string): string;
-var
-  tmp: string;
-begin
-  tmp := S;
-  // se contiene caratteri non alfanumerici o è keyword, quotalo
-  if (tmp = '') or (not TRegEx.IsMatch(tmp, '^[A-Za-z0-9_]+$')) or IsSqlKeyword(tmp) then
+  function UpperName(const S: string): string;
   begin
-    // raddoppia eventuali doppi apici interni
-    tmp := StringReplace(tmp, '"', '""', [rfReplaceAll]);
-    Result := '"' + tmp + '"';
-  end
+    Result := UpperCase(S);
+  end;
+
+  // generator/trigger canonical names (policy: UPPERCASE non quoted)
+  function CanonicalSeqName(const T, F: string): string;
+  begin
+    Result := 'GEN_' + UpperName(T) + '_' + UpperName(F);
+  end;
+
+  function CanonicalTrgName(const T, F: string): string;
+  begin
+    Result := 'BI_' + UpperName(T) + '_' + UpperName(F);
+  end;
+
+  // cerca generator/trigger provando sia la forma non-quoted (UPPER) sia la forma quotata
+  function FindGenerator(const Conn: TFDConnection; const Name: string): string;
+  begin
+    Result := '';
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Conn;
+      Q.SQL.Text := 'SELECT TRIM(RDB$GENERATOR_NAME) FROM RDB$GENERATORS WHERE RDB$GENERATOR_NAME = :N OR RDB$GENERATOR_NAME = :QN';
+      Q.ParamByName('N').AsString := Name;
+      Q.ParamByName('QN').AsString := '"' + Name + '"';
+      Q.Open;
+      if not Q.Eof then
+        Result := Q.Fields[0].AsString;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+
+  function FindTrigger(const Conn: TFDConnection; const Name: string): string;
+  begin
+    Result := '';
+    Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Conn;
+      Q.SQL.Text := 'SELECT TRIM(RDB$TRIGGER_NAME) FROM RDB$TRIGGERS WHERE RDB$TRIGGER_NAME = :N OR RDB$TRIGGER_NAME = :QN';
+      Q.ParamByName('N').AsString := Name;
+      Q.ParamByName('QN').AsString := '"' + Name + '"';
+      Q.Open;
+      if not Q.Eof then
+        Result := Q.Fields[0].AsString;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+
+  procedure CreateSequence(const Conn: TFDConnection; const Name: string);
+  begin
+    try
+      ExecSQL(Conn, 'CREATE SEQUENCE ' + Name + ';');
+      Report.Logs.Add('CREATE SEQUENCE eseguito: ' + Name);
+    except
+      on E: Exception do
+      begin
+        Report.Errors.Add(Format('Errore CREATE SEQUENCE %s: %s - %s', [Name, E.ClassName, E.Message]));
+        raise;
+      end;
+    end;
+  end;
+
+  procedure CreateTriggerBI(const Conn: TFDConnection; const Trg, Tbl, Fld, Seq: string);
+  var
+    s: string;
+  begin
+    // usa Ident(Tbl) e Ident(Fld) per riferimenti corretti alla tabella/campo
+    s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak +
+         'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
+         'AS' + sLineBreak +
+         'BEGIN' + sLineBreak +
+         '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak +
+         '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + ';' + sLineBreak +
+         'END;';
+    try
+      ExecSQL(Conn, s);
+      Report.Logs.Add('CREATE TRIGGER eseguito: ' + Trg + ' FOR ' + Tbl + '.' + Fld);
+    except
+      on E: Exception do
+      begin
+        Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
+        raise;
+      end;
+    end;
+  end;
+
+begin
+  if not Assigned(FBConn) then
+  begin
+    Report.Errors.Add('EnsureSequenceAndTrigger: FBConn non assegnata per ' + TableName);
+    Exit;
+  end;
+
+  SeqBase := CanonicalSeqName(TableName, FieldName);
+  TrgBase := CanonicalTrgName(TableName, FieldName);
+
+  // verifica esistenza generator/trigger (restituisce nome esatto se trovato)
+  foundSeqName := FindGenerator(FBConn, SeqBase);
+  foundTrgName := FindTrigger(FBConn, TrgBase);
+
+  existsSeq := (foundSeqName <> '');
+  existsTrg := (foundTrgName <> '');
+
+  // log diagnostico
+  if existsSeq then
+    Report.Logs.Add(Format('Generator trovato per %s.%s -> %s', [TableName, FieldName, foundSeqName]))
   else
-    Result := tmp; // nome semplice, non quoted
+    Report.Logs.Add(Format('Generator non trovato per %s.%s (atteso %s)', [TableName, FieldName, SeqBase]));
+
+  if existsTrg then
+    Report.Logs.Add(Format('Trigger trovato per %s.%s -> %s', [TableName, FieldName, foundTrgName]))
+  else
+    Report.Logs.Add(Format('Trigger non trovato per %s.%s (atteso %s)', [TableName, FieldName, TrgBase]));
+
+  // se manca il generator, crealo con nome canonico (UPPERCASE non quoted)
+  if not existsSeq then
+  begin
+    SeqName := SeqBase; // UPPER non quoted
+    try
+      CreateSequence(FBConn, SeqName);
+      // dopo creazione, aggiorna foundSeqName
+      foundSeqName := FindGenerator(FBConn, SeqName);
+      existsSeq := (foundSeqName <> '');
+    except
+      // errore già loggato in CreateSequence
+    end;
+  end;
+
+  // se manca il trigger, crealo con nome canonico (UPPERCASE non quoted)
+  if not existsTrg then
+  begin
+    TrgName := TrgBase; // UPPER non quoted
+    try
+      // per il trigger usiamo Ident(TableName) e Ident(FieldName) per referenziare correttamente
+      CreateTriggerBI(FBConn, TrgName, TableName, FieldName, SeqName);
+      foundTrgName := FindTrigger(FBConn, TrgName);
+      existsTrg := (foundTrgName <> '');
+    except
+      // errore già loggato in CreateTriggerBI
+    end;
+  end;
+
+  // final logging e aggiornamento report
+  if existsSeq then
+    Report.Logs.Add(Format('Generator confermato per %s.%s -> %s', [TableName, FieldName, foundSeqName]))
+  else
+    Report.Errors.Add(Format('Generator mancante dopo tentativo di creazione per %s.%s (atteso %s)', [TableName, FieldName, SeqBase]));
+
+  if existsTrg then
+    Report.Logs.Add(Format('Trigger confermato per %s.%s -> %s', [TableName, FieldName, foundTrgName]))
+  else
+    Report.Errors.Add(Format('Trigger mancante dopo tentativo di creazione per %s.%s (atteso %s)', [TableName, FieldName, TrgBase]));
 end;
+
+
 
 
 {----------------------------- CreateFBTableWithMeta ------------------------}
@@ -377,20 +516,9 @@ var
   I: Integer;
   Field: TField;
   PKFields: string;
-  // UseQuotedIdentifiers: Boolean;
+
   sSQL: string;
-(*
-  // helper locale per identificatori (con o senza doppi apici)
-  function Ident(const S: string): string;
-  begin
-    if UseQuotedIdentifiers then
-      Result := '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-    else
-      Result := S; // Firebird converte non-quoted in MAIUSCOLO
-  end;
-*)
 begin
-  //UseQuotedIdentifiers := False; // metti True se vuoi forzare "Client","ID_CLIENT" ecc.
 
   PX := TTable.Create(nil);
   SQL := TStringList.Create;
@@ -437,6 +565,56 @@ begin
         PKFields := PKFields + Ident(Field.FieldName);
       end;
     end;
+///
+// --- Se non ci sono ftAutoInc, considera i PK interi come AutoInc candidates ---
+if (Report.AutoIncFields.Count = 0) and (PKFields <> '') then
+begin
+  // PKFields contiene Ident(...) separati da virgola; rimuoviamo eventuali quote e spazi
+  var pkList: TStringList := TStringList.Create;
+  try
+    pkList.CommaText := StringReplace(PKFields, ' ', '', [rfReplaceAll]);
+    for var j := 0 to pkList.Count - 1 do
+    begin
+      // rimuovi eventuali doppi apici
+      var fldName := pkList[j];
+      fldName := StringReplace(fldName, '"', '', [rfReplaceAll]);
+
+      // trova il TField corrispondente in PX (case-insensitive)
+      var f: TField := PX.FindField(fldName);
+      if f = nil then
+      begin
+        // prova con uppercase/lowercase
+        f := PX.FindField(UpperCase(fldName));
+        if f = nil then
+          f := PX.FindField(LowerCase(fldName));
+      end;
+
+      if Assigned(f) then
+      begin
+        // considera autoinc solo se tipo intero
+        if f.DataType in [ftInteger, ftSmallint, ftLargeint] then
+        begin
+          // evita duplicati
+          if Report.AutoIncFields.IndexOf(f.FieldName) = -1 then
+            Report.AutoIncFields.Add(f.FieldName);
+          // registra PrimaryKey nel report se non già impostato
+          if Report.PrimaryKey = '' then
+            Report.PrimaryKey := f.FieldName
+          else if not AnsiContainsText(Report.PrimaryKey, f.FieldName) then
+            Report.PrimaryKey := Report.PrimaryKey + ',' + f.FieldName;
+        end;
+      end
+      else
+      begin
+        // logga se non trovi il campo (utile per debug)
+        Report.Logs.Add(Format('PK field not found in PX.Fields: %s (table %s)', [fldName, TableName]));
+      end;
+    end;
+  finally
+    pkList.Free;
+  end;
+end;
+/////
 
     // aggiungi constraint PK se presente
     if PKFields <> '' then
