@@ -27,7 +27,8 @@ procedure RunMigrationSelective(ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
                                 Tables: TStringList;
                                 Progress: TProgressBar;
-                                Log: TMemo);
+                                Log: TMemo;
+                                CopiaDati: Boolean);
 
 implementation
 
@@ -1209,7 +1210,8 @@ procedure RunMigrationSelective(ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
                                 Tables: TStringList;
                                 Progress: TProgressBar;
-                                Log: TMemo);
+                                Log: TMemo;
+                                CopiaDati: Boolean);
 var
   I: Integer;
   T: string;
@@ -1236,8 +1238,11 @@ begin
     Log.Lines.Add('Creazione schema: ' + T);
     CreateFBTableWithMeta(T, ParadoxDB, FBConn, Log, ReportList[I]);
 
-    Log.Lines.Add('Copia dati: ' + T);
-    CopyData(T, ParadoxDB, FBConn, Log, ReportList[I]);
+    if CopiaDati = true then
+    begin
+      Log.Lines.Add('Copia dati: ' + T);
+      CopyData(T, ParadoxDB, FBConn, Log, ReportList[I]);
+    end;
 
     Log.Lines.Add('Foreign key (euristica): ' + T);
     CreateForeignKeysHeuristic(T, FBConn, Log, ReportList[I]);

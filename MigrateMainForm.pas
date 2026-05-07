@@ -10,7 +10,8 @@ uses
   FireDAC.UI.Intf, FireDAC.VCLUI.Wait,
   MigrateEngine, FormWizardSelectTables, FireDAC.Stan.Intf, FireDAC.Stan.Option,
   FireDAC.Stan.Error, FireDAC.Phys.Intf, FireDAC.Stan.Pool, Data.DB,
-  Vcl.Controls, FireDAC.Phys.FBDef, Bde.DBTables, FireDAC.Phys.IBBase;
+  Vcl.Controls, FireDAC.Phys.FBDef, Bde.DBTables, FireDAC.Phys.IBBase,
+  Vcl.WinXCtrls;
 
 type
   TFormMain = class(TForm)
@@ -19,6 +20,7 @@ type
     ProgressBar: TProgressBar;
     FDConnFB: TFDConnection;
     FDPhysFBDriverLink1: TFDPhysFBDriverLink;
+    ToggleSwitch1: TToggleSwitch;
 
     procedure FormCreate(Sender: TObject);
     procedure BtnStartClick(Sender: TObject);
@@ -122,7 +124,8 @@ begin
             FDConnFB,       // FireDAC Firebird
             Wizard.SelectedTables,
             ProgressBar,
-            MemoLog
+            MemoLog,
+            ToggleSwitch1.State = tssOn
           );
 
       Log('Migrazione completata.');

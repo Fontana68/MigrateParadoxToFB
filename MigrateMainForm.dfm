@@ -36,11 +36,20 @@ object FormMain: TFormMain
     ScrollBars = ssVertical
     TabOrder = 2
   end
+  object ToggleSwitch1: TToggleSwitch
+    Left = 192
+    Top = 20
+    Width = 138
+    Height = 20
+    StateCaptions.CaptionOn = 'Copia Dati'
+    StateCaptions.CaptionOff = 'Database vuoto'
+    TabOrder = 3
+  end
   object FDConnParadox: TFDConnection
     Params.Strings = (
       'DriverID=BDE')
     LoginPrompt = False
-    Left = 232
+    Left = 448
     Top = 16
   end
   object FDConnFB: TFDConnection
@@ -53,12 +62,12 @@ object FormMain: TFormMain
         'B\Source\Win32\Debug\FB\MOT.FDB'
       'PageSize=8192')
     LoginPrompt = False
-    Left = 448
-    Top = 8
+    Left = 616
+    Top = 16
   end
   object FDPhysFBDriverLink1: TFDPhysFBDriverLink
     Embedded = True
-    Left = 392
-    Top = 8
+    Left = 552
+    Top = 16
   end
 end

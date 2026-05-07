@@ -7,7 +7,7 @@
         <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
         <ProjectName Condition="'$(ProjectName)'==''">MigrateParadoxToFB</ProjectName>
-        <TargetedPlatforms>3</TargetedPlatforms>
+        <TargetedPlatforms>1</TargetedPlatforms>
         <AppType>Application</AppType>
         <MainSource>MigrateParadoxToFB.dpr</MainSource>
     </PropertyGroup>
@@ -71,15 +71,22 @@
         <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
         <SanitizedProjectName>MigrateParadoxToFB</SanitizedProjectName>
+        <Custom_Styles>&quot;Windows11 Impressive Light|VCLSTYLE|$(BDSCOMMONDIR)\Styles\Windows11_Impressive_Light.vsf&quot;;&quot;Turquoise Gray|VCLSTYLE|$(BDSCOMMONDIR)\Styles\TurquoiseGray.vsf&quot;</Custom_Styles>
+        <VerInfo_Locale>1040</VerInfo_Locale>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <DCC_UsePackage>JvNet;vclwinx;bdertl;fmx;vclie;DbxCommonDriver;bindengine;VCLRESTComponents;FireDACCommonODBC;IndyIPCommon;FireDACCommonDriver;appanalytics;IndyProtocols;vclx;Skia.Package.RTL;MakerAI;dbxcds;vcledge;IndyIPClient;bindcompvclwinx;bindcompfmx;SysToolsDBDR;JvBands;inetdb;JvAppFrm;FireDACSqliteDriver;DbxClientDriver;tdbf;soapmidas;vclactnband;fmxFireDAC;dbexpress;JvManagedThreads;MakerAiDsg;DBXMySQLDriver;VclSmp;inet;JvPascalInterpreter;vcltouch;fmxase;JvPluginSystem;MakerAi.UI;JvDB;dbrtl;JvTimeFramework;Skia.Package.FMX;fmxdae;SysToolsDR;FireDACMSAccDriver;JvCustom;CustomIPTransport;JvSystem;AbbreviaVCLD;JclDeveloperTools;JvControls;vcldsnap;DBXInterBaseDriver;JvCrypt;JvJans;JvMM;IndySystem;JvWizards;Skia.Package.VCL;JvGlobus;vcldb;JclContainers;JvPageComps;TDRLabel;vclFireDAC;JvCore;MakerAi.RAG.Drivers;bindcomp;FireDACCommon;VclClient;inetstn;IndyCore;RESTBackendComponents;bindcompdbx;SkGaugesPkg;rtl;FireDACMySQLDriver;FireDACADSDriver;WclBluetoothFrameworkR;RESTComponents;DBXSqliteDriver;vcl;dsnapxml;adortl;dsnapcon;IndyIPServer;JvDotNetCtrls;JvHMI;TaurusTLS_RT;LockBoxDR;JvRuntimeDesign;JvXPCtrls;vclimg;FireDACPgDriver;FireDAC;inetdbxpress;JvDlgs;xmlrtl;tethering;JvStdCtrls;JvDocking;JvPrintPreview;bindcompvcl;dsnap;JvCmp;CloudService;fmxobj;bindcompvclsmp;BMDThreadPkg;soaprtl;vcldbx;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <BT_BuildType>Debug</BT_BuildType>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
-        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
+        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <AppExecutionLevel>requireAdministrator</AppExecutionLevel>
+        <Icon_MainIcon>MCTCSim_Icon.ico</Icon_MainIcon>
+        <UWP_DelphiLogo44>MCTCSim_Icon.ico</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>MCTCSim_Icon.ico</UWP_DelphiLogo150>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>vclwinx;fmx;vclie;DbxCommonDriver;bindengine;VCLRESTComponents;FireDACCommonODBC;IndyIPCommon;FireDACCommonDriver;appanalytics;IndyProtocols;vclx;MakerAI;dbxcds;vcledge;IndyIPClient;bindcompvclwinx;bindcompfmx;SysToolsDBDR;inetdb;FireDACSqliteDriver;DbxClientDriver;tdbf;soapmidas;JclVcl;vclactnband;fmxFireDAC;dbexpress;Jcl;MakerAiDsg;DBXMySQLDriver;VclSmp;inet;vcltouch;fmxase;MakerAi.UI;dbrtl;fmxdae;SysToolsDR;FireDACMSAccDriver;CustomIPTransport;AbbreviaVCLD;vcldsnap;DBXInterBaseDriver;IndySystem;Skia.Package.VCL;vcldb;TDRLabel;vclFireDAC;bindcomp;FireDACCommon;inetstn;IndyCore;RESTBackendComponents;bindcompdbx;rtl;FireDACMySQLDriver;FireDACADSDriver;WclBluetoothFrameworkR;RESTComponents;DBXSqliteDriver;vcl;dsnapxml;adortl;dsnapcon;IndyIPServer;TaurusTLS_RT;LockBoxDR;vclimg;FireDACPgDriver;FireDAC;inetdbxpress;xmlrtl;tethering;bindcompvcl;dsnap;CloudService;fmxobj;bindcompvclsmp;BMDThreadPkg;soaprtl;soapserver;FireDACIBDriver;$(DCC_UsePackage)</DCC_UsePackage>
@@ -163,6 +170,13 @@
                 </Excluded_Packages>
             </Delphi.Personality>
             <Deployment Version="5">
+                <DeployFile LocalName="MCTCSim_Icon.ico" Configuration="Debug" Class="UWP_DelphiLogo44">
+                    <Platform Name="Win32">
+                        <RemoteDir>Assets\</RemoteDir>
+                        <RemoteName>Logo44x44.png</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
                 <DeployFile LocalName="Win32\Debug\MigrateParadoxToFB.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>MigrateParadoxToFB.exe</RemoteName>
@@ -1122,7 +1136,7 @@
             </Deployment>
             <Platforms>
                 <Platform value="Win32">True</Platform>
-                <Platform value="Win64">True</Platform>
+                <Platform value="Win64">False</Platform>
             </Platforms>
         </BorlandProject>
         <ProjectFileVersion>12</ProjectFileVersion>
