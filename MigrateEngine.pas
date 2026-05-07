@@ -394,43 +394,50 @@ var
     end;
   end;
 
-  procedure CreateSequence(const Conn: TFDConnection; const Name: string);
-  begin
-    try
-      ExecSQL(Conn, 'CREATE SEQUENCE ' + Name + ';');
-      Report.Logs.Add('CREATE SEQUENCE eseguito: ' + Name);
-    except
-      on E: Exception do
-      begin
-        Report.Errors.Add(Format('Errore CREATE SEQUENCE %s: %s - %s', [Name, E.ClassName, E.Message]));
-        raise;
-      end;
+procedure CreateSequence(const Conn: TFDConnection; const Name: string);
+begin
+  try
+    // NON aggiungere il punto e virgola finale quando si esegue via API
+    ExecSQL(Conn, 'CREATE SEQUENCE ' + Name);
+    Report.Logs.Add('CREATE SEQUENCE eseguito: ' + Name);
+  except
+    on E: Exception do
+    begin
+      Report.Errors.Add(Format('Errore CREATE SEQUENCE %s: %s - %s', [Name, E.ClassName, E.Message]));
+      raise;
     end;
   end;
+end;
 
-  procedure CreateTriggerBI(const Conn: TFDConnection; const Trg, Tbl, Fld, Seq: string);
-  var
-    s: string;
-  begin
-    // usa Ident(Tbl) e Ident(Fld) per riferimenti corretti alla tabella/campo
-    s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak +
-         'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
-         'AS' + sLineBreak +
-         'BEGIN' + sLineBreak +
-         '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak +
-         '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + ';' + sLineBreak +
-         'END;';
-    try
-      ExecSQL(Conn, s);
-      Report.Logs.Add('CREATE TRIGGER eseguito: ' + Trg + ' FOR ' + Tbl + '.' + Fld);
-    except
-      on E: Exception do
-      begin
-        Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
-        raise;
-      end;
+procedure CreateTriggerBI(const Conn: TFDConnection; const Trg, Tbl, Fld, Seq: string);
+var
+  s: string;
+begin
+  // Costruisci il corpo del trigger senza terminatore finale ';'
+  // e senza terminatori superflui. Usa Ident per tabella/campo.
+  s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak +
+       'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
+       'AS' + sLineBreak +
+       'BEGIN' + sLineBreak +
+       '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak +
+       '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + sLineBreak +
+       'END'; // NO semicolon finale
+
+  // Logga il DDL esatto per debug
+  Report.Logs.Add('DDL CREATE TRIGGER per ' + Tbl + '.' + Fld + ':' + sLineBreak + s);
+
+  try
+    ExecSQL(Conn, s);
+    Report.Logs.Add('CREATE TRIGGER eseguito: ' + Trg + ' FOR ' + Tbl + '.' + Fld);
+  except
+    on E: Exception do
+    begin
+      Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
+      // rilancia per far emergere l'errore se vuoi interrompere il flusso
+      raise;
     end;
   end;
+end;
 
 begin
   if not Assigned(FBConn) then
