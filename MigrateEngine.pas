@@ -47,6 +47,82 @@ var
   ReportList: array of TTableReport;
 
  {-----------------------------------------------------------------}
+function FindLastWordEnd(const S: string): Integer;
+var
+  U: string;
+  p: Integer;
+  L: Integer;
+  beforeOk, afterOk: Boolean;
+begin
+  Result := 0;
+  U := UpperCase(S);
+  L := Length(U);
+  p := Pos('END', U);
+  while p > 0 do
+  begin
+    // controlla boundary: carattere precedente non alfanumerico/underscore
+    if p = 1 then
+      beforeOk := True
+    else
+      beforeOk := not CharInSet(U[p-1], ['A'..'Z','0'..'9','_']);
+
+    // controlla carattere dopo 'END'
+    if (p + 3) > L then
+      afterOk := True
+    else
+      afterOk := not CharInSet(U[p+3], ['A'..'Z','0'..'9','_']);
+
+    if beforeOk and afterOk then
+      Result := p; // aggiorna ultima occorrenza valida
+
+    p := PosEx('END', U, p + 1);
+  end;
+end;
+
+ function CleanDDL(const RawSQL: string; out Trimmed: Boolean): string;
+var
+  s: string;
+  lastPos, endPos, j: Integer;
+begin
+  Trimmed := False;
+  s := RawSQL;
+
+  // Normalizza newline
+  s := StringReplace(s, #13#10, #10, [rfReplaceAll]);
+  s := StringReplace(s, #13, #10, [rfReplaceAll]);
+
+  // trova l'ultima occorrenza della parola END (word boundary)
+  lastPos := FindLastWordEnd(s);
+  if lastPos = 0 then
+  begin
+    Result := RawSQL;
+    Exit;
+  end;
+
+  // calcola posizione subito dopo 'END'
+  endPos := lastPos + Length('END');
+
+  // consenti spazi/newline e un eventuale ';' subito dopo END
+  j := endPos + 1;
+  while (j <= Length(s)) and CharInSet(s[j], [' ', #9, #10, #13, ';']) do
+    Inc(j);
+
+  if j <= Length(s) then
+  begin
+    // c'era contenuto extra dopo END: taglia fino a j-1
+    Result := TrimRight(Copy(s, 1, j - 1));
+    Trimmed := True;
+  end
+  else
+  begin
+    Result := TrimRight(s);
+    Trimmed := False;
+  end;
+
+  // ripristina CRLF Windows
+  Result := StringReplace(Result, #10, sLineBreak, [rfReplaceAll]);
+end;
+(*
   function CleanDDL(const RawSQL: string; out Trimmed: Boolean): string;
   var
     // pattern: cattura tutto fino all'ultimo END che termina una statement
@@ -105,7 +181,7 @@ var
     // ripristina CRLF standard Windows se vuoi
     Result := StringReplace(Result, #10, sLineBreak, [rfReplaceAll]);
   end;
-
+*)
   {----------------------------- utilities ------------------------------------}
 
 {-----------------------------------------------------------------}
