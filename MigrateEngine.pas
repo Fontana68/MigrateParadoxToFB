@@ -5,6 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
   System.SysUtils, System.Classes, System.StrUtils,
+  System.RegularExpressions,
   Vcl.ComCtrls, Vcl.StdCtrls,
   Data.DB, Bde.DBTables,
   FireDAC.Comp.Client, FireDAC.Comp.DataSet, FireDAC.Stan.Intf, FireDAC.DApt, FireDAC.Stan.Param;
@@ -37,7 +38,6 @@ var
 
 {----------------------------- utilities ------------------------------------}
 
-
 function IsParadoxInvalidDateStr(const S: string): Boolean;
 var
   t: string;
@@ -52,6 +52,7 @@ begin
   Result := False;
 end;
 
+{-----------------------------------------------------------------}
 // Ritorna Variant: Null se invalida, altrimenti TDateTime
 function ParadoxFieldToDateTimeVariant(Field: TField): Variant;
 var
@@ -98,6 +99,7 @@ begin
   end;
 end;
 
+{-----------------------------------------------------------------}
 procedure PreScanInvalidDates(const TableName: string; ParadoxDB: TDatabase; Log: TMemo; var Report: TTableReport);
 var
   PX: TTable;
@@ -127,18 +129,19 @@ begin
   end;
 end;
 
-
-
+{-----------------------------------------------------------------}
 procedure ExecSQL(const Conn: TFDConnection; const SQL: string);
 begin
   Conn.ExecSQL(SQL);
 end;
 
+{-----------------------------------------------------------------}
 function FBIdent(const S: string): string;
 begin
   Result := StringReplace(S, ' ', '_', [rfReplaceAll]);
 end;
 
+{-----------------------------------------------------------------}
 function MapFieldTypeToFB(Field: TField): string;
 begin
   case Field.DataType of
@@ -160,6 +163,7 @@ begin
   end;
 end;
 
+{-----------------------------------------------------------------}
 function NormalizeIndexFields(const S: string): TStringList;
 var
   tmp: string;
@@ -176,6 +180,7 @@ begin
       Result.Add(UpperCase(parts[i]));
 end;
 
+{-----------------------------------------------------------------}
 function FieldIsPrimary(PX: TTable; const AFieldName: string; Log: TMemo): Boolean;
 var
   i, j: Integer;
@@ -224,6 +229,7 @@ begin
       Result := True;
 end;
 
+{-----------------------------------------------------------------}
 function MakeParamList(Count: Integer): string;
 var
   i: Integer;
@@ -239,7 +245,6 @@ begin
 end;
 
 {----------------------------- EnsureSequenceAndTrigger ---------------------}
-
 procedure EnsureSequenceAndTrigger(FBConn: TFDConnection;
   const TableName, FieldName: string; Log: TMemo; var Report: TTableReport);
 var
@@ -322,6 +327,43 @@ begin
   end;
 end;
 
+{-----------------------------------------------------------------}
+function IsSqlKeyword(const S: string): Boolean;
+const
+  // elenco ridotto ma efficace di keyword Firebird/SQL comuni
+  Keywords: array[0..28] of string = (
+    'DATE','TIME','TIMESTAMP','USER','PASSWORD','ORDER','GROUP','SELECT',
+    'INSERT','UPDATE','DELETE','TABLE','INDEX','CONSTRAINT','PRIMARY',
+    'KEY','TRIGGER','GENERATOR','SEQUENCE','VALUES','FROM','WHERE','AND',
+    'OR','NOT','NULL','LIKE','IN','BETWEEN'
+  );
+var
+  i: Integer;
+begin
+  for i := Low(Keywords) to High(Keywords) do
+    if SameText(S, Keywords[i]) then
+      Exit(True);
+  Result := False;
+end;
+
+{-----------------------------------------------------------------}
+function Ident(const S: string): string;
+var
+  tmp: string;
+begin
+  tmp := S;
+  // se contiene caratteri non alfanumerici o è keyword, quotalo
+  if (tmp = '') or (not TRegEx.IsMatch(tmp, '^[A-Za-z0-9_]+$')) or IsSqlKeyword(tmp) then
+  begin
+    // raddoppia eventuali doppi apici interni
+    tmp := StringReplace(tmp, '"', '""', [rfReplaceAll]);
+    Result := '"' + tmp + '"';
+  end
+  else
+    Result := tmp; // nome semplice, non quoted
+end;
+
+
 {----------------------------- CreateFBTableWithMeta ------------------------}
 
 procedure CreateFBTableWithMeta(const TableName: string;
@@ -335,8 +377,9 @@ var
   I: Integer;
   Field: TField;
   PKFields: string;
-  UseQuotedIdentifiers: Boolean;
-
+  // UseQuotedIdentifiers: Boolean;
+  sSQL: string;
+(*
   // helper locale per identificatori (con o senza doppi apici)
   function Ident(const S: string): string;
   begin
@@ -345,9 +388,9 @@ var
     else
       Result := S; // Firebird converte non-quoted in MAIUSCOLO
   end;
-
+*)
 begin
-  UseQuotedIdentifiers := False; // metti True se vuoi forzare "Client","ID_CLIENT" ecc.
+  //UseQuotedIdentifiers := False; // metti True se vuoi forzare "Client","ID_CLIENT" ecc.
 
   PX := TTable.Create(nil);
   SQL := TStringList.Create;
@@ -428,19 +471,26 @@ begin
         end;
       end;
     end;
-(*
+
     // Opzionale: se vuoi eliminare la tabella esistente prima di creare, decommenta
     try
       ExecSQL(FBConn, 'DROP TABLE ' + Ident(TableName) + ';');
     except
       // ignora errori di DROP (es. tabella non esiste)
     end;
-*)
+
     // Esegui DDL in transazione con logging dettagliato
     try
       if not FBConn.InTransaction then
         FBConn.StartTransaction;
-      ExecSQL(FBConn, SQL.Text);
+
+      sSQL := SQL.Text;
+      // rimuove eventuale ",\s*\)" (virgola prima della parentesi di chiusura)
+      sSQL := TRegEx.Replace(sSQL, ',\s*\)', ')', [roIgnoreCase]);
+      // ora esegui
+      ExecSQL(FBConn, sSQL);
+      // ExecSQL(FBConn, SQL.Text);
+
       FBConn.Commit;
       Report.Logs.Add('CREATE TABLE eseguito per ' + TableName);
     except
