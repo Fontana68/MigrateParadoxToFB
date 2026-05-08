@@ -65,8 +65,6 @@ object frmFBMigration: TfrmFBMigration
     ParentFont = False
     ScrollBars = ssVertical
     TabOrder = 3
-    ExplicitWidth = 524
-    ExplicitHeight = 272
   end
   object btnRun: TButton
     Left = 16

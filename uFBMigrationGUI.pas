@@ -29,15 +29,21 @@ type
     Log: TStringList;
     JSON: TJSONObject;
 
-    procedure LoadTables;
+    procedure LoadTablesFromDB;
+    procedure ApplyLightMode;
+    procedure ApplyDarkMode;
     procedure RunMigration;
+
     procedure UpdateProgressTotal(const Step, Total: Integer; const Msg: string);
     procedure UpdateProgressTable(const Step, Total: Integer; const Msg: string);
+
     procedure LogInfo(const Msg: string);
     procedure LogError(const Msg: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+
+    procedure SetTheme(const Dark: Boolean);
   end;
 
 var
@@ -62,7 +68,8 @@ begin
   ProgressBarTotal.Position := 0;
   ProgressBarTable.Position := 0;
 
-  LoadTables;
+  // Default: Light Mode
+  SetTheme(True);
 end;
 
 destructor TfrmFBMigration.Destroy;
@@ -73,14 +80,63 @@ begin
   inherited;
 end;
 
-procedure TfrmFBMigration.LoadTables;
+procedure TfrmFBMigration.SetTheme(const Dark: Boolean);
+begin
+  if Dark then
+    ApplyDarkMode
+  else
+    ApplyLightMode;
+end;
+
+procedure TfrmFBMigration.ApplyLightMode;
+begin
+  Color := clBtnFace;
+  reLog.Color := clWhite;
+  reLog.Font.Color := clBlack;
+  clbTables.Color := clWhite;
+  clbTables.Font.Color := clBlack;
+end;
+
+procedure TfrmFBMigration.ApplyDarkMode;
+begin
+  Color := $202020;
+  reLog.Color := $1A1A1A;
+  reLog.Font.Color := clWhite;
+  clbTables.Color := $1A1A1A;
+  clbTables.Font.Color := clWhite;
+end;
+
+procedure TfrmFBMigration.LoadTablesFromDB;
+var
+  Q: TFDQuery;
 begin
   clbTables.Items.Clear;
-  clbTables.Items.Add('CLIENT');
-  clbTables.Items.Add('ORDERS');
-  clbTables.Items.Add('PRODUCTS');
-  clbTables.Items.Add('SUPPLIERS');
-  clbTables.Items.Add('INVOICES');
+
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := Conn;
+    Q.SQL.Text :=
+      'SELECT RDB$RELATION_NAME ' +
+      'FROM RDB$RELATIONS ' +
+      'WHERE RDB$SYSTEM_FLAG = 0 ' +
+      'AND RDB$VIEW_SOURCE IS NULL ' +
+      'ORDER BY RDB$RELATION_NAME';
+
+    Q.Open;
+
+    while not Q.Eof do
+    begin
+      clbTables.Items.Add(Trim(Q.Fields[0].AsString));
+      Q.Next;
+    end;
+
+    // Seleziona tutte le tabelle
+    for var i := 0 to clbTables.Items.Count - 1 do
+      clbTables.Checked[i] := True;
+
+  finally
+    Q.Free;
+  end;
 end;
 
 procedure TfrmFBMigration.UpdateProgressTotal(const Step, Total: Integer; const Msg: string);
@@ -100,7 +156,7 @@ end;
 
 procedure TfrmFBMigration.LogInfo(const Msg: string);
 begin
-  reLog.SelAttributes.Color := clGreen;
+  reLog.SelAttributes.Color := clLime;
   reLog.Lines.Add(Msg);
 end;
 
@@ -144,6 +200,9 @@ begin
 
   Conn.Params.Database := DBPath;
   Conn.Connected := True;
+
+  // Auto-scan tabelle
+  LoadTablesFromDB;
 
   TotalTables := clbTables.Items.Count;
 

@@ -45,6 +45,15 @@ object FormMain: TFormMain
     StateCaptions.CaptionOff = 'Database vuoto'
     TabOrder = 3
   end
+  object btnGUI: TButton
+    Left = 360
+    Top = 19
+    Width = 75
+    Height = 25
+    Caption = 'btnGUI'
+    TabOrder = 4
+    OnClick = btnGUIClick
+  end
   object FDConnParadox: TFDConnection
     Params.Strings = (
       'DriverID=BDE')

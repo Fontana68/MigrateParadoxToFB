@@ -11,7 +11,9 @@ uses
   MigrateEngine, FormWizardSelectTables, FireDAC.Stan.Intf, FireDAC.Stan.Option,
   FireDAC.Stan.Error, FireDAC.Phys.Intf, FireDAC.Stan.Pool, Data.DB,
   Vcl.Controls, FireDAC.Phys.FBDef, Bde.DBTables, FireDAC.Phys.IBBase,
-  Vcl.WinXCtrls;
+  Vcl.WinXCtrls,
+  uFBMigrationGUI
+  ;
 
 type
   TFormMain = class(TForm)
@@ -21,9 +23,11 @@ type
     FDConnFB: TFDConnection;
     FDPhysFBDriverLink1: TFDPhysFBDriverLink;
     ToggleSwitch1: TToggleSwitch;
+    btnGUI: TButton;
 
     procedure FormCreate(Sender: TObject);
     procedure BtnStartClick(Sender: TObject);
+    procedure btnGUIClick(Sender: TObject);
 
   private
     FParadoxDB: TDatabase;            // BDE nativo
@@ -107,6 +111,25 @@ end;
 {------------------------------------------------------------------------------}
 {  AVVIO MIGRAZIONE }
 {------------------------------------------------------------------------------}
+
+procedure TFormMain.btnGUIClick(Sender: TObject);
+var
+  Frm: TfrmFBMigration;
+begin
+  // Creazione dell'istanza della form
+  Frm := TfrmFBMigration.Create(Self);
+  try
+    // Apertura in modalità Modale
+    // Il codice si ferma qui finché la form non viene chiusa
+    if Frm.ShowModal = mrOk then
+    begin
+      // Azione opzionale se l'utente preme un tasto "OK"
+    end;
+  finally
+    // Liberazione della memoria
+    Frm.Free;
+  end;
+end;
 
 procedure TFormMain.BtnStartClick(Sender: TObject);
 var
