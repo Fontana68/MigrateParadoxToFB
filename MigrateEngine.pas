@@ -47,7 +47,7 @@ const
 var
   ReportList: array of TTableReport;
 
- {-----------------------------------------------------------------}
+{-----------------------------------------------------------------}
 function FindLastWordEnd(const S: string): Integer;
 var
   U: string;
@@ -80,7 +80,8 @@ begin
   end;
 end;
 
- function CleanDDL(const RawSQL: string; out Trimmed: Boolean): string;
+{----------------------------------------------------------------------------}
+function CleanDDL(const RawSQL: string; out Trimmed: Boolean): string;
 var
   s: string;
   lastPos, endPos, j: Integer;
@@ -123,69 +124,8 @@ begin
   // ripristina CRLF Windows
   Result := StringReplace(Result, #10, sLineBreak, [rfReplaceAll]);
 end;
-(*
-  function CleanDDL(const RawSQL: string; out Trimmed: Boolean): string;
-  var
-    // pattern: cattura tutto fino all'ultimo END che termina una statement
-    // (?s) = dot matches newline; catturiamo il più lungo possibile fino a END seguito da optional ; e spazi fino a fine stringa
-    // useremo una ricerca per l'ultima occorrenza di '\bEND\b'
-    iLastEnd, iPos: Integer;
-    s: string;
-  begin
-    Trimmed := False;
-    s := RawSQL;
 
-    // Normalizza CRLF
-    s := StringReplace(s, #13#10, #10, [rfReplaceAll]);
-    s := StringReplace(s, #13, #10, [rfReplaceAll]);
-
-    // Trova l'ultima parola END (case-insensitive)
-    iLastEnd := 0;
-    iPos := 1;
-    while True do
-    begin
-      iPos := TRegEx.Match(s, '\bEND\b', [roIgnoreCase]).Index;
-      if iPos = 0 then Break;
-      iLastEnd := iPos;
-      Inc(iPos); // continua la ricerca
-    end;
-
-    if iLastEnd = 0 then
-    begin
-      // nessun END trovato: ritorna la stringa originale (ma logga)
-      Result := RawSQL;
-      Exit;
-    end;
-
-    // estrai dalla posizione dell'END fino alla fine della parola END
-    // trova la fine della parola END (posizione + length('END') - 1)
-    var endPos := iLastEnd + Length('END') - 1;
-
-    // dopo END può esserci spazio e un optional ';' — includili
-    var j := endPos + 1;
-    while (j <= Length(s)) and (CharInSet(s[j], [#9, #10, #13, ' ', ';'])) do
-      Inc(j);
-
-    // j ora punta al primo carattere dopo END e eventuale ; e spazi
-    // se j <= Length(s) allora c'è contenuto extra: tagliamo
-    if j <= Length(s) then
-    begin
-      Result := TrimRight(Copy(s, 1, j - 1)); // mantieni fino a END (+ ;/spazi)
-      Trimmed := True;
-    end
-    else
-    begin
-      Result := TrimRight(s);
-      Trimmed := False;
-    end;
-
-    // ripristina CRLF standard Windows se vuoi
-    Result := StringReplace(Result, #10, sLineBreak, [rfReplaceAll]);
-  end;
-*)
-  {----------------------------- utilities ------------------------------------}
-
-{-----------------------------------------------------------------}
+{----------------------------------------------------------------------------}
 function IsSqlKeyword(const S: string): Boolean;
 var
   i: Integer;
@@ -233,23 +173,6 @@ begin
   else
     Result := tmp;
 end;
-(*
-function Ident(const S: string): string;
-var
-  tmp: string;
-begin
-  tmp := S;
-  // se contiene caratteri non alfanumerici o è keyword, quotalo
-  if (tmp = '') or (not TRegEx.IsMatch(tmp, '^[A-Za-z0-9_]+$')) or IsSqlKeyword(tmp) then
-  begin
-    // raddoppia eventuali doppi apici interni
-    tmp := StringReplace(tmp, '"', '""', [rfReplaceAll]);
-    Result := '"' + tmp + '"';
-  end
-  else
-    Result := tmp; // nome semplice, non quoted
-end;
-*)
 
 {-----------------------------------------------------------------}
 function IsParadoxInvalidDateStr(const S: string): Boolean;
@@ -668,9 +591,207 @@ begin
 end;
 
 
+{-----------------------------------------------------------------}
+// uso ->SQL := GenerateBeforeInsertTrigger('CLIENT', 'ID_CLIENT', 'GEN_CLIENT_ID_CLIENT');
+(*
+CREATE TRIGGER CLIENT_BI FOR CLIENT
+ACTIVE BEFORE INSERT POSITION 0
+AS
+BEGIN
+  IF (NEW."ID_CLIENT" IS NULL) THEN
+    NEW."ID_CLIENT" = NEXT VALUE FOR "GEN_CLIENT_ID_CLIENT";
+END
+*)
+function GenerateTriggerBeforeInsertID(
+  const TableName, PKField, GeneratorName: string): string;
+begin
+  Result :=
+    'CREATE TRIGGER ' + Ident(TableName + '_BI') + ' FOR ' + Ident(TableName) + sLineBreak +
+    'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
+    'AS' + sLineBreak +
+    'BEGIN' + sLineBreak +
+    '  IF (NEW.' + Ident(PKField) + ' IS NULL) THEN' + sLineBreak +
+    '    NEW.' + Ident(PKField) + ' = NEXT VALUE FOR ' + Ident(GeneratorName) + ';' + sLineBreak +
+    'END';
+end;
+
+{-----------------------------------------------------------------}
+(*
+CREATE TRIGGER CLIENT_BU_PROTECT_ID FOR CLIENT
+ACTIVE BEFORE UPDATE POSITION 0
+AS
+BEGIN
+  IF (NEW."ID_CLIENT" <> OLD."ID_CLIENT") THEN
+    NEW."ID_CLIENT" = OLD."ID_CLIENT";
+END
+*)
+function GenerateTriggerProtectID(const TableName, PKField: string): string;
+begin
+  Result :=
+    'CREATE TRIGGER ' + Ident(TableName + '_BU_PROTECT_ID') + ' FOR ' + Ident(TableName) + sLineBreak +
+    'ACTIVE BEFORE UPDATE POSITION 0' + sLineBreak +
+    'AS' + sLineBreak +
+    'BEGIN' + sLineBreak +
+    '  IF (NEW.' + Ident(PKField) + ' <> OLD.' + Ident(PKField) + ') THEN' + sLineBreak +
+    '    NEW.' + Ident(PKField) + ' = OLD.' + Ident(PKField) + ';' + sLineBreak +
+    'END';
+end;
+
+{-----------------------------------------------------------------}
+(*
+CREATE TRIGGER CLIENT_BI_CREATED FOR CLIENT
+ACTIVE BEFORE INSERT POSITION 1
+AS
+BEGIN
+  IF (NEW."CREATED_AT" IS NULL) THEN
+    NEW."CREATED_AT" = CURRENT_TIMESTAMP;
+END
+*)
+function GenerateTriggerCreatedAt(const TableName: string): string;
+begin
+  Result :=
+    'CREATE TRIGGER ' + Ident(TableName + '_BI_CREATED') + ' FOR ' + Ident(TableName) + sLineBreak +
+    'ACTIVE BEFORE INSERT POSITION 1' + sLineBreak +
+    'AS' + sLineBreak +
+    'BEGIN' + sLineBreak +
+    '  IF (NEW."CREATED_AT" IS NULL) THEN' + sLineBreak +
+    '    NEW."CREATED_AT" = CURRENT_TIMESTAMP;' + sLineBreak +
+    'END';
+end;
+
+{-----------------------------------------------------------------}
+(*
+CREATE TRIGGER CLIENT_BU_UPDATED FOR CLIENT
+ACTIVE BEFORE UPDATE POSITION 1
+AS
+BEGIN
+  NEW."UPDATED_AT" = CURRENT_TIMESTAMP;
+END
+*)
+function GenerateTriggerUpdatedAt(const TableName: string): string;
+begin
+  Result :=
+    'CREATE TRIGGER ' + Ident(TableName + '_BU_UPDATED') + ' FOR ' + Ident(TableName) + sLineBreak +
+    'ACTIVE BEFORE UPDATE POSITION 1' + sLineBreak +
+    'AS' + sLineBreak +
+    'BEGIN' + sLineBreak +
+    '  NEW."UPDATED_AT" = CURRENT_TIMESTAMP;' + sLineBreak +
+    'END';
+end;
+
+{-----------------------------------------------------------------}
+(*
+CREATE TRIGGER CLIENT_BU_SOFTDELETE FOR CLIENT
+ACTIVE BEFORE UPDATE POSITION 2
+AS
+BEGIN
+  IF (NEW."DELETED" = 1 AND OLD."DELETED" = 0) THEN
+    NEW."DELETED_AT" = CURRENT_TIMESTAMP;
+END
+*)
+function GenerateTriggerSoftDelete(const TableName: string): string;
+begin
+  Result :=
+    'CREATE TRIGGER ' + Ident(TableName + '_BU_SOFTDELETE') + ' FOR ' + Ident(TableName) + sLineBreak +
+    'ACTIVE BEFORE UPDATE POSITION 2' + sLineBreak +
+    'AS' + sLineBreak +
+    'BEGIN' + sLineBreak +
+    '  IF (NEW."DELETED" = 1 AND OLD."DELETED" = 0) THEN' + sLineBreak +
+    '    NEW."DELETED_AT" = CURRENT_TIMESTAMP;' + sLineBreak +
+    'END';
+end;
+
+{-----------------------------------------------------------------}
+function FieldExists(const Fields: TFields; const FieldName: string): Boolean;
+begin
+  Result := Fields.FindField(FieldName) <> nil;
+end;
+{-----------------------------------------------------------------}
+function TriggerExists(const Conn: TFDConnection; const TriggerName: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := Conn;
+    Q.SQL.Text :=
+      'SELECT RDB$TRIGGER_NAME FROM RDB$TRIGGERS ' +
+      'WHERE RDB$TRIGGER_NAME = :N';
+    Q.ParamByName('N').AsString := UpperCase(TriggerName);
+    Q.Open;
+    Result := not Q.IsEmpty;
+  finally
+    Q.Free;
+  end;
+end;
+
+{-----------------------------------------------------------------}
+procedure CreateTriggersForTable(
+  const Conn: TFDConnection;
+  const TableName, PKField, GeneratorName: string;
+  const Fields: TFields;
+  const Log: TStrings);
+var
+  SQL: string;
+begin
+  // Trigger ID autoincrementale
+  if (PKField <> '') and (GeneratorName <> '') then
+  begin
+    if not TriggerExists(Conn, TableName + '_BI') then
+    begin
+      SQL := GenerateTriggerBeforeInsertID(TableName, PKField, GeneratorName);
+      Conn.ExecSQL(SQL);
+      Log.Add('Trigger created: ' + TableName + '_BI');
+    end;
+  end;
+
+  // Protezione ID
+  if PKField <> '' then
+  begin
+    if not TriggerExists(Conn, TableName + '_BU_PROTECT_ID') then
+    begin
+      SQL := GenerateTriggerProtectID(TableName, PKField);
+      Conn.ExecSQL(SQL);
+      Log.Add('Trigger created: ' + TableName + '_BU_PROTECT_ID');
+    end;
+  end;
+
+  // CREATED_AT
+  if FieldExists(Fields, 'CREATED_AT') then
+  begin
+    if not TriggerExists(Conn, TableName + '_BI_CREATED') then
+    begin
+      SQL := GenerateTriggerCreatedAt(TableName);
+      Conn.ExecSQL(SQL);
+      Log.Add('Trigger created: ' + TableName + '_BI_CREATED');
+    end;
+  end;
+
+  // UPDATED_AT
+  if FieldExists(Fields, 'UPDATED_AT') then
+  begin
+    if not TriggerExists(Conn, TableName + '_BU_UPDATED') then
+    begin
+      SQL := GenerateTriggerUpdatedAt(TableName);
+      Conn.ExecSQL(SQL);
+      Log.Add('Trigger created: ' + TableName + '_BU_UPDATED');
+    end;
+  end;
+
+  // SOFT DELETE
+  if FieldExists(Fields, 'DELETED') and FieldExists(Fields, 'DELETED_AT') then
+  begin
+    if not TriggerExists(Conn, TableName + '_BU_SOFTDELETE') then
+    begin
+      SQL := GenerateTriggerSoftDelete(TableName);
+      Conn.ExecSQL(SQL);
+      Log.Add('Trigger created: ' + TableName + '_BU_SOFTDELETE');
+    end;
+  end;
+end;
+
 
 {----------------------------- CreateFBTableWithMeta ------------------------}
-
 procedure CreateFBTableWithMeta(const TableName: string;
                                 ParadoxDB: TDatabase;
                                 FBConn: TFDConnection;
@@ -872,6 +993,15 @@ end;
           Report.Errors.Add('Errore CREATE INDEX ' + PX.IndexDefs[I].Name + ': ' + E.ClassName + ' - ' + E.Message);
       end;
     end;
+(*
+CreateTriggersForTable(
+  FBConn,
+  TableName,
+  PKField,
+  GeneratorName,
+  Table.Fields,
+  Log);
+*)
 
     // --- crea SEQUENCE e TRIGGER per campi autoinc trovati (controllo esistenza) ---
     for I := 0 to Report.AutoIncFields.Count - 1 do
