@@ -1,0 +1,2 @@
+mi generi anche una uFBMigrationWizard.pas
+Un wizard passo?passo stile installer (Next/Back/Finish)?

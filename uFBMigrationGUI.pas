@@ -5,18 +5,22 @@ interface
 uses
   System.SysUtils, System.Classes, System.JSON, System.IOUtils,
   Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.Dialogs,
+  Vcl.CheckLst, Vcl.Controls, Vcl.Graphics,
   Winapi.ShellAPI, Winapi.Windows,
   FireDAC.Comp.Client, FireDAC.Stan.Def, FireDAC.Stan.Async,
-  FireDAC.DApt, uFBMigration, uFBMigrationReport, Vcl.Controls;
+  FireDAC.DApt, uFBMigration, uFBMigrationReport;
 
 type
   TfrmFBMigration = class(TForm)
+    lblStatus: TLabel;
+    lblTables: TLabel;
+    ProgressBarTotal: TProgressBar;
+    ProgressBarTable: TProgressBar;
+    clbTables: TCheckListBox;
+    reLog: TRichEdit;
     btnRun: TButton;
     btnOpenHTML: TButton;
     btnOpenJSON: TButton;
-    MemoLog: TMemo;
-    ProgressBar: TProgressBar;
-    lblStatus: TLabel;
     procedure btnRunClick(Sender: TObject);
     procedure btnOpenHTMLClick(Sender: TObject);
     procedure btnOpenJSONClick(Sender: TObject);
@@ -24,8 +28,13 @@ type
     Conn: TFDConnection;
     Log: TStringList;
     JSON: TJSONObject;
+
+    procedure LoadTables;
     procedure RunMigration;
-    procedure UpdateProgress(const Step, Total: Integer; const Msg: string);
+    procedure UpdateProgressTotal(const Step, Total: Integer; const Msg: string);
+    procedure UpdateProgressTable(const Step, Total: Integer; const Msg: string);
+    procedure LogInfo(const Msg: string);
+    procedure LogError(const Msg: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -50,8 +59,10 @@ begin
   Log := TStringList.Create;
   JSON := TJSONObject.Create;
 
-  ProgressBar.Min := 0;
-  ProgressBar.Max := 100;
+  ProgressBarTotal.Position := 0;
+  ProgressBarTable.Position := 0;
+
+  LoadTables;
 end;
 
 destructor TfrmFBMigration.Destroy;
@@ -62,12 +73,41 @@ begin
   inherited;
 end;
 
-procedure TfrmFBMigration.UpdateProgress(const Step, Total: Integer; const Msg: string);
+procedure TfrmFBMigration.LoadTables;
 begin
-  ProgressBar.Position := Round((Step / Total) * 100);
+  clbTables.Items.Clear;
+  clbTables.Items.Add('CLIENT');
+  clbTables.Items.Add('ORDERS');
+  clbTables.Items.Add('PRODUCTS');
+  clbTables.Items.Add('SUPPLIERS');
+  clbTables.Items.Add('INVOICES');
+end;
+
+procedure TfrmFBMigration.UpdateProgressTotal(const Step, Total: Integer; const Msg: string);
+begin
+  ProgressBarTotal.Position := Round((Step / Total) * 100);
   lblStatus.Caption := Msg;
-  MemoLog.Lines.Add(Msg);
+  LogInfo(Msg);
   Application.ProcessMessages;
+end;
+
+procedure TfrmFBMigration.UpdateProgressTable(const Step, Total: Integer; const Msg: string);
+begin
+  ProgressBarTable.Position := Round((Step / Total) * 100);
+  LogInfo('  ' + Msg);
+  Application.ProcessMessages;
+end;
+
+procedure TfrmFBMigration.LogInfo(const Msg: string);
+begin
+  reLog.SelAttributes.Color := clGreen;
+  reLog.Lines.Add(Msg);
+end;
+
+procedure TfrmFBMigration.LogError(const Msg: string);
+begin
+  reLog.SelAttributes.Color := clRed;
+  reLog.Lines.Add(Msg);
 end;
 
 procedure TfrmFBMigration.btnRunClick(Sender: TObject);
@@ -79,15 +119,16 @@ procedure TfrmFBMigration.RunMigration;
 var
   OD: TOpenDialog;
   DBPath: string;
+  TableName: string;
   Table: TFDTable;
+  i, TotalTables: Integer;
 begin
-  MemoLog.Clear;
+  reLog.Clear;
   Log.Clear;
 
   JSON.Free;
   JSON := TJSONObject.Create;
 
-  // --- DIALOGO FILE CORRETTO ---
   OD := TOpenDialog.Create(nil);
   try
     OD.Filter := 'Firebird Database (*.fdb)|*.fdb';
@@ -101,39 +142,56 @@ begin
     OD.Free;
   end;
 
-  // --- CONNESSIONE ---
   Conn.Params.Database := DBPath;
   Conn.Connected := True;
 
-  UpdateProgress(1, 10, 'Connessione al database...');
+  TotalTables := clbTables.Items.Count;
 
-  Table := TFDTable.Create(nil);
-  try
-    Table.Connection := Conn;
-    Table.TableName := 'CLIENT';
-    Table.Open;
+  UpdateProgressTotal(0, TotalTables, 'Inizio migrazione...');
 
-    UpdateProgress(2, 10, 'Migrazione trigger CLIENT...');
+  for i := 0 to clbTables.Items.Count - 1 do
+  begin
+    if not clbTables.Checked[i] then
+      Continue;
 
-    CreateTriggersForTable(
-      Conn,
-      'CLIENT',
-      'ID_CLIENT',
-      'GEN_CLIENT_ID_CLIENT',
-      Table.Fields,
-      Log,
-      JSON);
+    TableName := clbTables.Items[i];
 
-    UpdateProgress(10, 10, 'Migrazione completata.');
+    UpdateProgressTotal(i + 1, TotalTables, 'Tabella: ' + TableName);
 
-    SaveHTMLReport(Log, 'migration_log.html');
-    SaveJSONReport(JSON, 'migration_report.json');
+    Table := TFDTable.Create(nil);
+    try
+      Table.Connection := Conn;
+      Table.TableName := TableName;
+      Table.Open;
 
-    ShowMessage('Migrazione completata con successo.');
+      UpdateProgressTable(0, 3, 'Analisi struttura...');
 
-  finally
+      CreateTriggersForTable(
+        Conn,
+        TableName,
+        'ID_' + TableName,
+        'GEN_' + TableName + '_ID',
+        Table.Fields,
+        Log,
+        JSON);
+
+      UpdateProgressTable(3, 3, 'Trigger completati.');
+
+    except
+      on E: Exception do
+      begin
+        LogError('Errore tabella ' + TableName + ': ' + E.Message);
+      end;
+    end;
+
     Table.Free;
   end;
+
+  SaveHTMLReport(Log, 'migration_log.html');
+  SaveJSONReport(JSON, 'migration_report.json');
+
+  UpdateProgressTotal(TotalTables, TotalTables, 'Migrazione completata.');
+  ShowMessage('Migrazione completata.');
 end;
 
 procedure TfrmFBMigration.btnOpenHTMLClick(Sender: TObject);
