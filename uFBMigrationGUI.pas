@@ -69,7 +69,7 @@ begin
   ProgressBarTable.Position := 0;
 
   // Default: Light Mode
-  SetTheme(True);
+  SetTheme(False);
 end;
 
 destructor TfrmFBMigration.Destroy;

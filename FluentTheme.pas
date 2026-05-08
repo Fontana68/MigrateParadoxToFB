@@ -101,10 +101,25 @@ begin
 end;
 
 procedure StyleNavButton(B: TButton; Mode: TFluentThemeMode);
+var
+  FB: TFluentButton;
 begin
-  StyleFluentButton(B, Mode);
-  B.Align := alTop;
-  B.Height := 40;
+  // Converti il TButton in TFluentButton mantenendo proprietà
+  FB := TFluentButton.Create(B.Owner);
+  FB.Parent := B.Parent;
+  FB.Left := B.Left;
+  FB.Top := B.Top;
+  FB.Width := B.Width;
+  FB.Height := B.Height;
+  FB.Caption := B.Caption;
+  FB.OnClick := B.OnClick;
+
+  FB.Align := alTop;
+  FB.Height := 40;
+
+  B.Free;
+
+  FB.ApplyStyle(Mode);
 end;
 
 {------------------------------------------------------------------------------}

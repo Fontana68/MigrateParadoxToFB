@@ -12,11 +12,15 @@ uses
   FireDAC.Stan.Error, FireDAC.Phys.Intf, FireDAC.Stan.Pool, Data.DB,
   Vcl.Controls, FireDAC.Phys.FBDef, Bde.DBTables, FireDAC.Phys.IBBase,
   Vcl.WinXCtrls,
-  uFBMigrationGUI
+  uFBMigrationGUI, Vcl.ExtCtrls
   ;
 
 type
   TFormMain = class(TForm)
+    PanelTitleBar: TPanel;
+    LabelTitle: TLabel;
+    BtnClose: TButton;
+    PanelContent: TPanel;
     BtnStart: TButton;
     MemoLog: TMemo;
     ProgressBar: TProgressBar;
@@ -28,6 +32,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure BtnStartClick(Sender: TObject);
     procedure btnGUIClick(Sender: TObject);
+    procedure BtnCloseClick(Sender: TObject);
 
   private
     FParadoxDB: TDatabase;            // BDE nativo
@@ -41,6 +46,9 @@ implementation
 
 {$R *.dfm}
 
+uses FluentTheme;
+
+
 {------------------------------------------------------------------------------}
 {  CONFIGURAZIONE INIZIALE }
 {------------------------------------------------------------------------------}
@@ -51,6 +59,12 @@ var
   //uPath: string;
 
 begin
+  ApplyMica(Self);
+  ApplyFluentTheme(Self, ftLight);
+
+  StyleFluentButton(BtnStart, ftLight);
+  StyleFluentButton(BtnGUI, ftLight);
+
   // Percorso base EXE
   // Root := ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)));
   Root := ExtractFilePath(Application.ExeName);
@@ -111,6 +125,11 @@ end;
 {------------------------------------------------------------------------------}
 {  AVVIO MIGRAZIONE }
 {------------------------------------------------------------------------------}
+
+procedure TFormMain.BtnCloseClick(Sender: TObject);
+begin
+  Close;
+end;
 
 procedure TFormMain.btnGUIClick(Sender: TObject);
 var

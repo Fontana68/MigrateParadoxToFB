@@ -17,7 +17,6 @@ uses
 begin
   Application.Initialize;
   Application.MainFormOnTaskbar := True;
-  TStyleManager.TrySetStyle('Windows11 Impressive Dark');
   Application.CreateForm(TFormMain, FormMain);
   Application.Run;
 end.

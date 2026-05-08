@@ -2,8 +2,8 @@ object frmFBMigration: TfrmFBMigration
   Left = 200
   Top = 120
   Caption = 'Firebird Migration'
-  ClientHeight = 520
-  ClientWidth = 820
+  ClientHeight = 512
+  ClientWidth = 818
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -12,8 +12,8 @@ object frmFBMigration: TfrmFBMigration
   Font.Style = []
   Position = poScreenCenter
   DesignSize = (
-    820
-    520)
+    818
+    512)
   TextHeight = 13
   object lblStatus: TLabel
     Left = 16
@@ -48,14 +48,14 @@ object frmFBMigration: TfrmFBMigration
     Top = 136
     Width = 240
     Height = 280
-    ItemHeight = 15
+    ItemHeight = 17
     TabOrder = 2
   end
   object reLog: TRichEdit
     Left = 272
     Top = 136
-    Width = 526
-    Height = 280
+    Width = 522
+    Height = 272
     Anchors = [akLeft, akTop, akRight, akBottom]
     Font.Charset = ANSI_CHARSET
     Font.Color = clWindowText
@@ -65,6 +65,8 @@ object frmFBMigration: TfrmFBMigration
     ParentFont = False
     ScrollBars = ssVertical
     TabOrder = 3
+    ExplicitWidth = 520
+    ExplicitHeight = 264
   end
   object btnRun: TButton
     Left = 16

@@ -3,13 +3,10 @@
 interface
 
 uses
-  Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
-  System.SysUtils, System.Classes, System.StrUtils,
-  System.RegularExpressions,
-  System.IOUtils,
-  Vcl.ComCtrls, Vcl.StdCtrls,
-  Data.DB, Bde.DBTables,
-  FireDAC.Comp.Client, FireDAC.Comp.DataSet, FireDAC.Stan.Intf, FireDAC.DApt, FireDAC.Stan.Param;
+  Winapi.Windows, Winapi.Messages, Winapi.ShellAPI, System.SysUtils,
+  System.Classes, System.StrUtils, System.RegularExpressions, System.IOUtils,
+  Vcl.ComCtrls, Vcl.StdCtrls, Data.DB, Bde.DBTables, FireDAC.Comp.Client,
+  FireDAC.Comp.DataSet, FireDAC.Stan.Intf, FireDAC.DApt, FireDAC.Stan.Param;
 
 type
   TTableReport = record
@@ -23,12 +20,7 @@ type
     Logs: TStringList; // nuova lista per messaggi diagnostici / info
   end;
 
-procedure RunMigrationSelective(ParadoxDB: TDatabase;
-                                FBConn: TFDConnection;
-                                Tables: TStringList;
-                                Progress: TProgressBar;
-                                Log: TMemo;
-                                CopiaDati: Boolean);
+procedure RunMigrationSelective(ParadoxDB: TDatabase; FBConn: TFDConnection; Tables: TStringList; Progress: TProgressBar; Log: TMemo; CopiaDati: Boolean);
 
 implementation
 
@@ -37,12 +29,7 @@ uses
 
 const
   // elenco minimale di keyword SQL/Firebird; estendi se necessario
-  SQL_KEYWORDS: array[0..28] of string = (
-    'DATE','TIME','TIMESTAMP','USER','PASSWORD','ORDER','GROUP','SELECT',
-    'INSERT','UPDATE','DELETE','TABLE','INDEX','CONSTRAINT','PRIMARY',
-    'KEY','TRIGGER','GENERATOR','SEQUENCE','VALUES','FROM','WHERE','AND',
-    'OR','NOT','NULL','LIKE','IN','BETWEEN'
-  );
+  SQL_KEYWORDS: array[0..28] of string = ('DATE', 'TIME', 'TIMESTAMP', 'USER', 'PASSWORD', 'ORDER', 'GROUP', 'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TABLE', 'INDEX', 'CONSTRAINT', 'PRIMARY', 'KEY', 'TRIGGER', 'GENERATOR', 'SEQUENCE', 'VALUES', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'NULL', 'LIKE', 'IN', 'BETWEEN');
 
 var
   ReportList: array of TTableReport;
@@ -65,13 +52,13 @@ begin
     if p = 1 then
       beforeOk := True
     else
-      beforeOk := not CharInSet(U[p-1], ['A'..'Z','0'..'9','_']);
+      beforeOk := not CharInSet(U[p - 1], ['A'..'Z', '0'..'9', '_']);
 
     // controlla carattere dopo 'END'
     if (p + 3) > L then
       afterOk := True
     else
-      afterOk := not CharInSet(U[p+3], ['A'..'Z','0'..'9','_']);
+      afterOk := not CharInSet(U[p + 3], ['A'..'Z', '0'..'9', '_']);
 
     if beforeOk and afterOk then
       Result := p; // aggiorna ultima occorrenza valida
@@ -198,8 +185,10 @@ var
   FS: TFormatSettings;
 begin
   Result := Null;
-  if Field = nil then Exit;
-  if Field.IsNull then Exit;
+  if Field = nil then
+    Exit;
+  if Field.IsNull then
+    Exit;
 
   // leggi come stringa per essere permissivi
   s := Trim(Field.AsString);
@@ -282,19 +271,32 @@ end;
 function MapFieldTypeToFB(Field: TField): string;
 begin
   case Field.DataType of
-    ftString, ftWideString: Result := 'VARCHAR(' + IntToStr(Field.Size) + ')';
-    ftInteger:              Result := 'INTEGER';
-    ftSmallint:             Result := 'SMALLINT';
-    ftLargeint:             Result := 'BIGINT';
-    ftFloat:                Result := 'DOUBLE PRECISION';
-    ftCurrency:             Result := 'NUMERIC(18,4)';
-    ftBCD, ftFMTBcd:        Result := 'NUMERIC(18,4)';
-    ftDate:                 Result := 'DATE';
-    ftTime:                 Result := 'TIME';
-    ftDateTime, ftTimeStamp:Result := 'TIMESTAMP';
-    ftMemo, ftWideMemo:     Result := 'BLOB SUB_TYPE TEXT';
-    ftBlob:                 Result := 'BLOB';
-    ftAutoInc:              Result := 'INTEGER';
+    ftString, ftWideString:
+      Result := 'VARCHAR(' + IntToStr(Field.Size) + ')';
+    ftInteger:
+      Result := 'INTEGER';
+    ftSmallint:
+      Result := 'SMALLINT';
+    ftLargeint:
+      Result := 'BIGINT';
+    ftFloat:
+      Result := 'DOUBLE PRECISION';
+    ftCurrency:
+      Result := 'NUMERIC(18,4)';
+    ftBCD, ftFMTBcd:
+      Result := 'NUMERIC(18,4)';
+    ftDate:
+      Result := 'DATE';
+    ftTime:
+      Result := 'TIME';
+    ftDateTime, ftTimeStamp:
+      Result := 'TIMESTAMP';
+    ftMemo, ftWideMemo:
+      Result := 'BLOB SUB_TYPE TEXT';
+    ftBlob:
+      Result := 'BLOB';
+    ftAutoInc:
+      Result := 'INTEGER';
   else
     Result := 'VARCHAR(100)';
   end;
@@ -310,7 +312,8 @@ begin
   Result := TStringList.Create;
   tmp := StringReplace(S, ';', ',', [rfReplaceAll]);
   tmp := StringReplace(tmp, ' ', '', [rfReplaceAll]);
-  if tmp = '' then Exit;
+  if tmp = '' then
+    Exit;
   parts := tmp.Split([',']);
   for i := 0 to Length(parts) - 1 do
     if parts[i] <> '' then
@@ -326,23 +329,27 @@ var
   fName: string;
 begin
   Result := False;
-  if (PX = nil) or (AFieldName = '') then Exit;
+  if (PX = nil) or (AFieldName = '') then
+    Exit;
 
   try
     PX.IndexDefs.Update;
   except
     // se Update fallisce, logga e esci
-    if Assigned(Log) then Log.Lines.Add('Warning: IndexDefs.Update failed for ' + PX.TableName);
+    if Assigned(Log) then
+      Log.Lines.Add('Warning: IndexDefs.Update failed for ' + PX.TableName);
     Exit;
   end;
 
   for i := 0 to PX.IndexDefs.Count - 1 do
   begin
     idxDef := PX.IndexDefs[i];
-    if idxDef = nil then Continue;
+    if idxDef = nil then
+      Continue;
 
     // solo indici marcati come primari
-    if not (ixPrimary in idxDef.Options) then Continue;
+    if not (ixPrimary in idxDef.Options) then
+      Continue;
 
     fieldsList := NormalizeIndexFields(idxDef.Fields);
     try
@@ -372,7 +379,8 @@ var
   i: Integer;
 begin
   Result := '';
-  if Count <= 0 then Exit;
+  if Count <= 0 then
+    Exit;
   for i := 1 to Count do
   begin
     Result := Result + ':p' + IntToStr(i);
@@ -386,15 +394,16 @@ function GeneratorExists(Q: TFDQuery; const Name: string): Boolean;
 begin
   Q.SQL.Text := 'SELECT COUNT(*) FROM RDB$GENERATORS WHERE RDB$GENERATOR_NAME = :G';
   Q.ParamByName('G').AsString := Name;
-  Q.Open; Result := Q.Fields[0].AsInteger > 0; Q.Close;
+  Q.Open;
+  Result := Q.Fields[0].AsInteger > 0;
+  Q.Close;
 end;
 
 // usa GeneratorExists(Q, SeqName) e GeneratorExists(Q, '"' + SeqName + '"') per coprire i casi
 
 
 {----------------------------- EnsureSequenceAndTrigger ---------------------}
-procedure EnsureSequenceAndTrigger(FBConn: TFDConnection;
-  const TableName, FieldName: string; Log: TMemo; var Report: TTableReport);
+procedure EnsureSequenceAndTrigger(FBConn: TFDConnection; const TableName, FieldName: string; Log: TMemo; var Report: TTableReport);
 var
   SeqBase, TrgBase: string;
   SeqName, TrgName: string;
@@ -478,13 +487,7 @@ var
   begin
     // Costruisci il corpo del trigger senza terminatore finale ';'
     // e senza terminatori superflui. Usa Ident per tabella/campo.
-    s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak +
-         'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
-         'AS' + sLineBreak +
-         'BEGIN' + sLineBreak +
-         '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak +
-         '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + ';' + sLineBreak +
-         'END'; // NO semicolon finale
+    s := 'CREATE TRIGGER ' + Trg + ' FOR ' + Ident(Tbl) + sLineBreak + 'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak + 'AS' + sLineBreak + 'BEGIN' + sLineBreak + '  IF (NEW.' + Ident(Fld) + ' IS NULL) THEN' + sLineBreak + '    NEW.' + Ident(Fld) + ' = NEXT VALUE FOR ' + Seq + ';' + sLineBreak + 'END'; // NO semicolon finale
 
     // pulizia robusta
     s := CleanDDL(s, wasTrimmed);
@@ -492,9 +495,9 @@ var
       Report.Logs.Add('CleanDDL ha rimosso contenuto extra dal DDL del trigger per ' + Tbl + '.' + Fld);
 
 // log completo delimitato (molto utile)
-  Report.Logs.Add('---BEGIN CREATE TRIGGER DDL---');
-  Report.Logs.Add(s);
-  Report.Logs.Add('---END CREATE TRIGGER DDL---');
+    Report.Logs.Add('---BEGIN CREATE TRIGGER DDL---');
+    Report.Logs.Add(s);
+    Report.Logs.Add('---END CREATE TRIGGER DDL---');
 
     try
       ExecSQL(Conn, s);
@@ -502,16 +505,16 @@ var
     except
       on E: Exception do
       begin
-       Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
+        Report.Errors.Add(Format('Errore CREATE TRIGGER %s: %s - %s', [Trg, E.ClassName, E.Message]));
       // salva DDL fallito su file per analisi
-      outFile := TPath.Combine(ExtractFilePath(ParamStr(0)), 'DDL_Failed_' + Trg + '.sql');
-      try
-        TFile.WriteAllText(outFile, s, TEncoding.UTF8);
-        Report.Logs.Add('DDL fallito salvato in: ' + outFile);
-      except
-        Report.Logs.Add('Impossibile salvare DDL fallito su file: ' + outFile);
-      end;
-      raise; // rilancia per far emergere l'errore a livello superiore
+        outFile := TPath.Combine(ExtractFilePath(ParamStr(0)), 'DDL_Failed_' + Trg + '.sql');
+        try
+          TFile.WriteAllText(outFile, s, TEncoding.UTF8);
+          Report.Logs.Add('DDL fallito salvato in: ' + outFile);
+        except
+          Report.Logs.Add('Impossibile salvare DDL fallito su file: ' + outFile);
+        end;
+        raise; // rilancia per far emergere l'errore a livello superiore
       end;
     end;
   end;
@@ -602,17 +605,9 @@ BEGIN
     NEW."ID_CLIENT" = NEXT VALUE FOR "GEN_CLIENT_ID_CLIENT";
 END
 *)
-function GenerateTriggerBeforeInsertID(
-  const TableName, PKField, GeneratorName: string): string;
+function GenerateTriggerBeforeInsertID(const TableName, PKField, GeneratorName: string): string;
 begin
-  Result :=
-    'CREATE TRIGGER ' + Ident(TableName + '_BI') + ' FOR ' + Ident(TableName) + sLineBreak +
-    'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak +
-    'AS' + sLineBreak +
-    'BEGIN' + sLineBreak +
-    '  IF (NEW.' + Ident(PKField) + ' IS NULL) THEN' + sLineBreak +
-    '    NEW.' + Ident(PKField) + ' = NEXT VALUE FOR ' + Ident(GeneratorName) + ';' + sLineBreak +
-    'END';
+  Result := 'CREATE TRIGGER ' + Ident(TableName + '_BI') + ' FOR ' + Ident(TableName) + sLineBreak + 'ACTIVE BEFORE INSERT POSITION 0' + sLineBreak + 'AS' + sLineBreak + 'BEGIN' + sLineBreak + '  IF (NEW.' + Ident(PKField) + ' IS NULL) THEN' + sLineBreak + '    NEW.' + Ident(PKField) + ' = NEXT VALUE FOR ' + Ident(GeneratorName) + ';' + sLineBreak + 'END';
 end;
 
 {-----------------------------------------------------------------}
@@ -627,14 +622,7 @@ END
 *)
 function GenerateTriggerProtectID(const TableName, PKField: string): string;
 begin
-  Result :=
-    'CREATE TRIGGER ' + Ident(TableName + '_BU_PROTECT_ID') + ' FOR ' + Ident(TableName) + sLineBreak +
-    'ACTIVE BEFORE UPDATE POSITION 0' + sLineBreak +
-    'AS' + sLineBreak +
-    'BEGIN' + sLineBreak +
-    '  IF (NEW.' + Ident(PKField) + ' <> OLD.' + Ident(PKField) + ') THEN' + sLineBreak +
-    '    NEW.' + Ident(PKField) + ' = OLD.' + Ident(PKField) + ';' + sLineBreak +
-    'END';
+  Result := 'CREATE TRIGGER ' + Ident(TableName + '_BU_PROTECT_ID') + ' FOR ' + Ident(TableName) + sLineBreak + 'ACTIVE BEFORE UPDATE POSITION 0' + sLineBreak + 'AS' + sLineBreak + 'BEGIN' + sLineBreak + '  IF (NEW.' + Ident(PKField) + ' <> OLD.' + Ident(PKField) + ') THEN' + sLineBreak + '    NEW.' + Ident(PKField) + ' = OLD.' + Ident(PKField) + ';' + sLineBreak + 'END';
 end;
 
 {-----------------------------------------------------------------}
@@ -649,14 +637,7 @@ END
 *)
 function GenerateTriggerCreatedAt(const TableName: string): string;
 begin
-  Result :=
-    'CREATE TRIGGER ' + Ident(TableName + '_BI_CREATED') + ' FOR ' + Ident(TableName) + sLineBreak +
-    'ACTIVE BEFORE INSERT POSITION 1' + sLineBreak +
-    'AS' + sLineBreak +
-    'BEGIN' + sLineBreak +
-    '  IF (NEW."CREATED_AT" IS NULL) THEN' + sLineBreak +
-    '    NEW."CREATED_AT" = CURRENT_TIMESTAMP;' + sLineBreak +
-    'END';
+  Result := 'CREATE TRIGGER ' + Ident(TableName + '_BI_CREATED') + ' FOR ' + Ident(TableName) + sLineBreak + 'ACTIVE BEFORE INSERT POSITION 1' + sLineBreak + 'AS' + sLineBreak + 'BEGIN' + sLineBreak + '  IF (NEW."CREATED_AT" IS NULL) THEN' + sLineBreak + '    NEW."CREATED_AT" = CURRENT_TIMESTAMP;' + sLineBreak + 'END';
 end;
 
 {-----------------------------------------------------------------}
@@ -670,13 +651,7 @@ END
 *)
 function GenerateTriggerUpdatedAt(const TableName: string): string;
 begin
-  Result :=
-    'CREATE TRIGGER ' + Ident(TableName + '_BU_UPDATED') + ' FOR ' + Ident(TableName) + sLineBreak +
-    'ACTIVE BEFORE UPDATE POSITION 1' + sLineBreak +
-    'AS' + sLineBreak +
-    'BEGIN' + sLineBreak +
-    '  NEW."UPDATED_AT" = CURRENT_TIMESTAMP;' + sLineBreak +
-    'END';
+  Result := 'CREATE TRIGGER ' + Ident(TableName + '_BU_UPDATED') + ' FOR ' + Ident(TableName) + sLineBreak + 'ACTIVE BEFORE UPDATE POSITION 1' + sLineBreak + 'AS' + sLineBreak + 'BEGIN' + sLineBreak + '  NEW."UPDATED_AT" = CURRENT_TIMESTAMP;' + sLineBreak + 'END';
 end;
 
 {-----------------------------------------------------------------}
@@ -691,14 +666,7 @@ END
 *)
 function GenerateTriggerSoftDelete(const TableName: string): string;
 begin
-  Result :=
-    'CREATE TRIGGER ' + Ident(TableName + '_BU_SOFTDELETE') + ' FOR ' + Ident(TableName) + sLineBreak +
-    'ACTIVE BEFORE UPDATE POSITION 2' + sLineBreak +
-    'AS' + sLineBreak +
-    'BEGIN' + sLineBreak +
-    '  IF (NEW."DELETED" = 1 AND OLD."DELETED" = 0) THEN' + sLineBreak +
-    '    NEW."DELETED_AT" = CURRENT_TIMESTAMP;' + sLineBreak +
-    'END';
+  Result := 'CREATE TRIGGER ' + Ident(TableName + '_BU_SOFTDELETE') + ' FOR ' + Ident(TableName) + sLineBreak + 'ACTIVE BEFORE UPDATE POSITION 2' + sLineBreak + 'AS' + sLineBreak + 'BEGIN' + sLineBreak + '  IF (NEW."DELETED" = 1 AND OLD."DELETED" = 0) THEN' + sLineBreak + '    NEW."DELETED_AT" = CURRENT_TIMESTAMP;' + sLineBreak + 'END';
 end;
 
 {-----------------------------------------------------------------}
@@ -707,6 +675,7 @@ begin
   Result := Fields.FindField(FieldName) <> nil;
 end;
 {-----------------------------------------------------------------}
+
 function TriggerExists(const Conn: TFDConnection; const TriggerName: string): Boolean;
 var
   Q: TFDQuery;
@@ -714,9 +683,7 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := Conn;
-    Q.SQL.Text :=
-      'SELECT RDB$TRIGGER_NAME FROM RDB$TRIGGERS ' +
-      'WHERE RDB$TRIGGER_NAME = :N';
+    Q.SQL.Text := 'SELECT RDB$TRIGGER_NAME FROM RDB$TRIGGERS ' + 'WHERE RDB$TRIGGER_NAME = :N';
     Q.ParamByName('N').AsString := UpperCase(TriggerName);
     Q.Open;
     Result := not Q.IsEmpty;
@@ -726,11 +693,7 @@ begin
 end;
 
 {-----------------------------------------------------------------}
-procedure CreateTriggersForTable(
-  const Conn: TFDConnection;
-  const TableName, PKField, GeneratorName: string;
-  const Fields: TFields;
-  const Log: TStrings);
+procedure CreateTriggersForTable(const Conn: TFDConnection; const TableName, PKField, GeneratorName: string; const Fields: TFields; const Log: TStrings);
 var
   SQL: string;
 begin
@@ -792,18 +755,13 @@ end;
 
 
 {----------------------------- CreateFBTableWithMeta ------------------------}
-procedure CreateFBTableWithMeta(const TableName: string;
-                                ParadoxDB: TDatabase;
-                                FBConn: TFDConnection;
-                                Log: TMemo;
-                                var Report: TTableReport);
+procedure CreateFBTableWithMeta(const TableName: string; ParadoxDB: TDatabase; FBConn: TFDConnection; Log: TMemo; var Report: TTableReport);
 var
   PX: TTable;
   SQL: TStringList;
   I: Integer;
   Field: TField;
   PKFields: string;
-
   sSQL: string;
 begin
 
@@ -842,65 +800,65 @@ begin
         Report.AutoIncFields.Add(Field.FieldName);
 
       // aggiungi definizione campo
-      SQL.Add('  ' + Ident(Field.FieldName) + ' ' + MapFieldTypeToFB(Field) +
-              IfThen(I < PX.FieldCount - 1, ',', ''));
+      SQL.Add('  ' + Ident(Field.FieldName) + ' ' + MapFieldTypeToFB(Field) + IfThen(I < PX.FieldCount - 1, ',', ''));
 
       // verifica se il campo è parte della PK (usando la funzione robusta FieldIsPrimary)
       if FieldIsPrimary(PX, Field.FieldName, Log) then
       begin
-        if PKFields <> '' then PKFields := PKFields + ',';
+        if PKFields <> '' then
+          PKFields := PKFields + ',';
         PKFields := PKFields + Ident(Field.FieldName);
       end;
     end;
 ///
 // --- Se non ci sono ftAutoInc, considera i PK interi come AutoInc candidates ---
-if (Report.AutoIncFields.Count = 0) and (PKFields <> '') then
-begin
-  // PKFields contiene Ident(...) separati da virgola; rimuoviamo eventuali quote e spazi
-  var pkList: TStringList := TStringList.Create;
-  try
-    pkList.CommaText := StringReplace(PKFields, ' ', '', [rfReplaceAll]);
-    for var j := 0 to pkList.Count - 1 do
+    if (Report.AutoIncFields.Count = 0) and (PKFields <> '') then
     begin
+  // PKFields contiene Ident(...) separati da virgola; rimuoviamo eventuali quote e spazi
+      var pkList: TStringList := TStringList.Create;
+      try
+        pkList.CommaText := StringReplace(PKFields, ' ', '', [rfReplaceAll]);
+        for var j := 0 to pkList.Count - 1 do
+        begin
       // rimuovi eventuali doppi apici
-      var fldName := pkList[j];
-      fldName := StringReplace(fldName, '"', '', [rfReplaceAll]);
+          var fldName := pkList[j];
+          fldName := StringReplace(fldName, '"', '', [rfReplaceAll]);
 
       // trova il TField corrispondente in PX (case-insensitive)
-      var f: TField := PX.FindField(fldName);
-      if f = nil then
-      begin
+          var f: TField := PX.FindField(fldName);
+          if f = nil then
+          begin
         // prova con uppercase/lowercase
-        f := PX.FindField(UpperCase(fldName));
-        if f = nil then
-          f := PX.FindField(LowerCase(fldName));
-      end;
+            f := PX.FindField(UpperCase(fldName));
+            if f = nil then
+              f := PX.FindField(LowerCase(fldName));
+          end;
 
-      if Assigned(f) then
-      begin
+          if Assigned(f) then
+          begin
         // considera autoinc solo se tipo intero
-        if f.DataType in [ftInteger, ftSmallint, ftLargeint] then
-        begin
+            if f.DataType in [ftInteger, ftSmallint, ftLargeint] then
+            begin
           // evita duplicati
-          if Report.AutoIncFields.IndexOf(f.FieldName) = -1 then
-            Report.AutoIncFields.Add(f.FieldName);
+              if Report.AutoIncFields.IndexOf(f.FieldName) = -1 then
+                Report.AutoIncFields.Add(f.FieldName);
           // registra PrimaryKey nel report se non già impostato
-          if Report.PrimaryKey = '' then
-            Report.PrimaryKey := f.FieldName
-          else if not AnsiContainsText(Report.PrimaryKey, f.FieldName) then
-            Report.PrimaryKey := Report.PrimaryKey + ',' + f.FieldName;
-        end;
-      end
-      else
-      begin
+              if Report.PrimaryKey = '' then
+                Report.PrimaryKey := f.FieldName
+              else if not AnsiContainsText(Report.PrimaryKey, f.FieldName) then
+                Report.PrimaryKey := Report.PrimaryKey + ',' + f.FieldName;
+            end;
+          end
+          else
+          begin
         // logga se non trovi il campo (utile per debug)
-        Report.Logs.Add(Format('PK field not found in PX.Fields: %s (table %s)', [fldName, TableName]));
+            Report.Logs.Add(Format('PK field not found in PX.Fields: %s (table %s)', [fldName, TableName]));
+          end;
+        end;
+      finally
+        pkList.Free;
       end;
     end;
-  finally
-    pkList.Free;
-  end;
-end;
 /////
 
     // aggiungi constraint PK se presente
@@ -976,13 +934,13 @@ end;
     // --- crea indici secondari (non primari) ---
     for I := 0 to PX.IndexDefs.Count - 1 do
     begin
-      if (ixPrimary in PX.IndexDefs[I].Options) then Continue;
-      if PX.IndexDefs[I].Fields = '' then Continue;
+      if (ixPrimary in PX.IndexDefs[I].Options) then
+        Continue;
+      if PX.IndexDefs[I].Fields = '' then
+        Continue;
 
       SQL.Clear;
-      SQL.Add('CREATE INDEX ' + Ident('IX_' + TableName + '_' + PX.IndexDefs[I].Name) +
-              ' ON ' + Ident(TableName) + ' (' +
-              StringReplace(PX.IndexDefs[I].Fields, ';', ',', [rfReplaceAll]) + ');');
+      SQL.Add('CREATE INDEX ' + Ident('IX_' + TableName + '_' + PX.IndexDefs[I].Name) + ' ON ' + Ident(TableName) + ' (' + StringReplace(PX.IndexDefs[I].Fields, ';', ',', [rfReplaceAll]) + ');');
 
       try
         ExecSQL(FBConn, SQL.Text);
@@ -1017,18 +975,13 @@ end;
 
 {----------------------------- CopyData ------------------------------------}
 
-procedure CopyData(const TableName: string;
-                   ParadoxDB: TDatabase;
-                   FBConn: TFDConnection;
-                   Log: TMemo;
-                   var Report: TTableReport);
+procedure CopyData(const TableName: string; ParadoxDB: TDatabase; FBConn: TFDConnection; Log: TMemo; var Report: TTableReport);
 var
   PX: TTable;
   FBQuery: TFDQuery;
   I: Integer;
   paramName: string;
   v: Variant;
-
 begin
   PX := TTable.Create(nil);
   FBQuery := TFDQuery.Create(nil);
@@ -1065,8 +1018,8 @@ begin
                 else
                   FBQuery.ParamByName(paramName).AsDateTime := v;
               end;
-            else
-              FBQuery.ParamByName(paramName).Value := PX.Fields[I].Value;
+          else
+            FBQuery.ParamByName(paramName).Value := PX.Fields[I].Value;
           end;
         except
           on E: Exception do
@@ -1097,10 +1050,7 @@ end;
 
 {----------------------------- Foreign keys heuristic ----------------------}
 
-procedure CreateForeignKeysHeuristic(const TableName: string;
-                                     FBConn: TFDConnection;
-                                     Log: TMemo;
-                                     var Report: TTableReport);
+procedure CreateForeignKeysHeuristic(const TableName: string; FBConn: TFDConnection; Log: TMemo; var Report: TTableReport);
 var
   Q: TFDQuery;
   FieldName, RefTable: string;
@@ -1116,16 +1066,12 @@ begin
     begin
       FieldName := Trim(Q.Fields[0].AsString);
 
-      if FieldName.EndsWith('_ID') then
+      if FieldName.EndsWith('ID_') then
       begin
-        RefTable := Copy(FieldName, 1, Length(FieldName) - 3);
+        RefTable := Copy(FieldName, 1, Length(FieldName)); // ex -3
 
         try
-          FBConn.ExecSQL(
-            'ALTER TABLE ' + FBIdent(TableName) +
-            ' ADD CONSTRAINT FK_' + FBIdent(TableName) + '_' + FBIdent(FieldName) +
-            ' FOREIGN KEY (' + FBIdent(FieldName) + ') REFERENCES ' + FBIdent(RefTable) + '(ID);'
-          );
+          FBConn.ExecSQL('ALTER TABLE ' + FBIdent(TableName) + ' ADD CONSTRAINT FK_' + FBIdent(TableName) + '_' + FBIdent(FieldName) + ' FOREIGN KEY (' + FBIdent(FieldName) + ') REFERENCES ' + FBIdent(RefTable) + '(ID);');
 
           Report.ForeignKeys.Add(FieldName + ' → ' + RefTable);
           Report.Logs.Add('FK creata: ' + FieldName + ' → ' + RefTable);
@@ -1156,11 +1102,16 @@ var
     Result := '';
     for j := 1 to Length(S) do
       case S[j] of
-        '&': Result := Result + '&amp;';
-        '<': Result := Result + '&lt;';
-        '>': Result := Result + '&gt;';
-        '"': Result := Result + '&quot;';
-        '''': Result := Result + '&#39;';
+        '&':
+          Result := Result + '&amp;';
+        '<':
+          Result := Result + '&lt;';
+        '>':
+          Result := Result + '&gt;';
+        '"':
+          Result := Result + '&quot;';
+        '''':
+          Result := Result + '&#39;';
       else
         Result := Result + S[j];
       end;
@@ -1177,7 +1128,7 @@ var
     for k := 1 to Length(tmp) do
     begin
       ch := tmp[k];
-      if not CharInSet(ch, ['0'..'9','A'..'Z','a'..'z']) then
+      if not CharInSet(ch, ['0'..'9', 'A'..'Z', 'a'..'z']) then
         tmp[k] := '_';
     end;
     Result := 'table_' + IntToStr(Index) + '_' + tmp;
@@ -1312,9 +1263,7 @@ begin
     SL.Add('<nav class="toc">');
     SL.Add('<ul>');
     for i := 0 to totalTables - 1 do
-      SL.Add('<li><a href="#' + HtmlEncode(SafeId(i, ReportList[i].TableName)) + '">' +
-             HtmlEncode(ReportList[i].TableName) + '</a> - Records: ' + IntToStr(ReportList[i].RecordsCopied) +
-             ' - Errors: ' + IntToStr(ReportList[i].Errors.Count) + ' - Logs: ' + IntToStr(ReportList[i].Logs.Count) + '</li>');
+      SL.Add('<li><a href="#' + HtmlEncode(SafeId(i, ReportList[i].TableName)) + '">' + HtmlEncode(ReportList[i].TableName) + '</a> - Records: ' + IntToStr(ReportList[i].RecordsCopied) + ' - Errors: ' + IntToStr(ReportList[i].Errors.Count) + ' - Logs: ' + IntToStr(ReportList[i].Logs.Count) + '</li>');
     SL.Add('</ul>');
     SL.Add('</nav>');
     SL.Add('<hr/>');
@@ -1336,12 +1285,7 @@ end;
 
 {----------------------------- RunMigrationSelective ------------------------}
 
-procedure RunMigrationSelective(ParadoxDB: TDatabase;
-                                FBConn: TFDConnection;
-                                Tables: TStringList;
-                                Progress: TProgressBar;
-                                Log: TMemo;
-                                CopiaDati: Boolean);
+procedure RunMigrationSelective(ParadoxDB: TDatabase; FBConn: TFDConnection; Tables: TStringList; Progress: TProgressBar; Log: TMemo; CopiaDati: Boolean);
 var
   I: Integer;
   T: string;

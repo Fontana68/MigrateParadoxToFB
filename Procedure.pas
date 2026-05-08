@@ -242,7 +242,18 @@ CopyParadoxToFirebird('CLIENTI');
 CopyParadoxToFirebird('ORDINI');
 CopyParadoxToFirebird('RIGHE');
 
+Paradox,Firebird
+Alpha,VARCHAR
+Number,INTEGER / DOUBLE
+Currency,"NUMERIC(18,4)"
+Date,DATE
+Time,TIME
+Timestamp,TIMESTAMP
+Memo,BLOB SUB_TYPE TEXT
+Binary,BLOB
+
 ->indice
+autoincrement Paradox vanno convertiti in:
 CREATE SEQUENCE GEN_CLIENTI_ID;
 ->trigger
 CREATE TRIGGER BI_CLIENTI_ID FOR CLIENTI
