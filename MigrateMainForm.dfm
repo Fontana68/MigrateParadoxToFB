@@ -13,6 +13,7 @@ object FormMain: TFormMain
   Font.Style = []
   Position = poScreenCenter
   OnCreate = FormCreate
+  OnShow = FormShow
   TextHeight = 17
   object PanelTitleBar: TPanel
     Left = 0

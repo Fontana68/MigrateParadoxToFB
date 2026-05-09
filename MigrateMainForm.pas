@@ -33,6 +33,7 @@ type
     procedure BtnStartClick(Sender: TObject);
     procedure btnGUIClick(Sender: TObject);
     procedure BtnCloseClick(Sender: TObject);
+    procedure FormShow(Sender: TObject);
 
   private
     FParadoxDB: TDatabase;            // BDE nativo
@@ -60,10 +61,13 @@ var
 
 begin
   ApplyMica(Self);
-  ApplyFluentTheme(Self, ftLight);
+  ApplyFluentTheme(Self, ftDark);
 
-  StyleFluentButton(BtnStart, ftLight);
-  StyleFluentButton(BtnGUI, ftLight);
+  StyleFluentButton(BtnStart, ftDark);
+  StyleFluentButton(BtnClose, ftDark);
+
+  FadeIn(Self);
+  SlideIn(PanelContent);
 
   // Percorso base EXE
   // Root := ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(Application.ExeName)));
@@ -120,6 +124,10 @@ begin
     on E: Exception do
       raise Exception.Create('Errore apertura FireBird: ' + E.Message);
   end;
+end;
+
+procedure TFormMain.FormShow(Sender: TObject);
+begin
 end;
 
 {------------------------------------------------------------------------------}

@@ -46,6 +46,7 @@ begin
   U := UpperCase(S);
   L := Length(U);
   p := Pos('END', U);
+
   while p > 0 do
   begin
     // controlla boundary: carattere precedente non alfanumerico/underscore
