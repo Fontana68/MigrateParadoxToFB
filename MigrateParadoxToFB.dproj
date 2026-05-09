@@ -71,7 +71,7 @@
         <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
         <SanitizedProjectName>MigrateParadoxToFB</SanitizedProjectName>
-        <Custom_Styles>&quot;Windows11 Impressive Dark|VCLSTYLE|$(BDSCOMMONDIR)\Styles\Windows11_Impressive_Dark.vsf&quot;;&quot;Windows11 Impressive Light|VCLSTYLE|$(BDSCOMMONDIR)\Styles\Windows11_Impressive_Light.vsf&quot;;&quot;Turquoise Gray|VCLSTYLE|$(BDSCOMMONDIR)\Styles\TurquoiseGray.vsf&quot;</Custom_Styles>
+        <Custom_Styles>&quot;Windows11 Impressive Light|VCLSTYLE|$(BDSCOMMONDIR)\Styles\Windows11_Impressive_Light.vsf&quot;</Custom_Styles>
         <VerInfo_Locale>1040</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
     </PropertyGroup>
@@ -83,7 +83,6 @@
         <VerInfo_Locale>1033</VerInfo_Locale>
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
-        <AppExecutionLevel>requireAdministrator</AppExecutionLevel>
         <Icon_MainIcon>MCTCSim_Icon.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>MCTCSim_Icon.ico</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>MCTCSim_Icon.ico</UWP_DelphiLogo150>
@@ -111,7 +110,6 @@
         <DCC_RemoteDebug>false</DCC_RemoteDebug>
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1033</VerInfo_Locale>
-        <AppExecutionLevel>requireAdministrator</AppExecutionLevel>
         <Icon_MainIcon>MCTCSim_Icon.ico</Icon_MainIcon>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1_Win64)'!=''">
@@ -124,7 +122,9 @@
         <DCC_DebugInformation>0</DCC_DebugInformation>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win32)'!=''">
-        <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <Icon_MainIcon>MCTCSim_Icon.ico</Icon_MainIcon>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win64)'!=''">
         <AppDPIAwarenessMode>PerMonitorV2</AppDPIAwarenessMode>
