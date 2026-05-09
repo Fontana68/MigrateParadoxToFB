@@ -1,2 +1,6 @@
 mi generi anche una uFBMigrationWizard.pas
 Un wizard passo?passo stile installer (Next/Back/Finish)?
+
+generarti uno script automatico che legge qualsiasi tabella Paradox e crea la corrispondente tabella Firebird (mapping completo tipi → tipi)
+
+creare uno script di test SQL per verificare sequence/trigger in isql

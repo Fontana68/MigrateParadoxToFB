@@ -1096,6 +1096,72 @@ begin
 end;
 
 {----------------------------- Foreign keys heuristic ----------------------}
+function TableExists(FBConn: TFDConnection; const TableName: string): Boolean;
+begin
+  Result :=
+    FBConn.ExecSQLScalar(
+      'SELECT COUNT(*) FROM RDB$RELATIONS ' +
+      'WHERE RDB$RELATION_NAME = :T AND RDB$SYSTEM_FLAG = 0',
+      [UpperCase(TableName)]
+    ) > 0;
+end;
+
+function ColumnExists(FBConn: TFDConnection; const TableName, ColumnName: string): Boolean;
+begin
+  Result :=
+    FBConn.ExecSQLScalar(
+      'SELECT COUNT(*) FROM RDB$RELATION_FIELDS ' +
+      'WHERE RDB$RELATION_NAME = :T AND RDB$FIELD_NAME = :C',
+      [UpperCase(TableName), UpperCase(ColumnName)]
+    ) > 0;
+end;
+
+function ForeignKeyExists(FBConn: TFDConnection; const TableName, FieldName: string): Boolean;
+begin
+  Result :=
+    FBConn.ExecSQLScalar(
+      'SELECT COUNT(*) ' +
+      'FROM RDB$RELATION_CONSTRAINTS RC ' +
+      'JOIN RDB$INDEX_SEGMENTS ISG ON RC.RDB$INDEX_NAME = ISG.RDB$INDEX_NAME ' +
+      'WHERE RC.RDB$RELATION_NAME = :T ' +
+      '  AND RC.RDB$CONSTRAINT_TYPE = ''FOREIGN KEY'' ' +
+      '  AND ISG.RDB$FIELD_NAME = :F',
+      [UpperCase(TableName), UpperCase(FieldName)]
+    ) > 0;
+end;
+
+function GetPrimaryKeyColumn(FBConn: TFDConnection; const TableName: string): string;
+begin
+  Result := FBConn.ExecSQLScalar(
+    'SELECT TRIM(ISG.RDB$FIELD_NAME) ' +
+    'FROM RDB$RELATION_CONSTRAINTS RC ' +
+    'JOIN RDB$INDEX_SEGMENTS ISG ON RC.RDB$INDEX_NAME = ISG.RDB$INDEX_NAME ' +
+    'WHERE RC.RDB$RELATION_NAME = :T ' +
+    '  AND RC.RDB$CONSTRAINT_TYPE = ''PRIMARY KEY'' ' +
+    'ORDER BY ISG.RDB$FIELD_POSITION',
+    [UpperCase(TableName)]
+  );
+end;
+
+function ResolveReferenceTable(FBConn: TFDConnection; const BaseName: string): string;
+var
+  Candidates: array of string;
+  C: string;
+begin
+  Result := '';
+
+  SetLength(Candidates, 6);
+  Candidates[0] := UpperCase(BaseName);                     // BRAKE
+  Candidates[1] := 'RIS' + UpperCase(BaseName);             // RISBRAKE
+  Candidates[2] := UpperCase(BaseName) + 'S';               // BRAKES
+  Candidates[3] := 'RIS_' + UpperCase(BaseName);            // RIS_BRAKE
+  Candidates[4] := 'RIS' + UpperCase(BaseName) + 'S';       // RISBRAKES
+  Candidates[5] := 'RIS' + Copy(BaseName,1,1) + LowerCase(Copy(BaseName,2)); // RisBrake
+
+  for C in Candidates do
+    if TableExists(FBConn, C) then
+      Exit(C);
+end;
 
 procedure CreateForeignKeysHeuristic(const TableName: string;
                                      FBConn: TFDConnection;
@@ -1103,35 +1169,91 @@ procedure CreateForeignKeysHeuristic(const TableName: string;
                                      var Report: TTableReport);
 var
   Q: TFDQuery;
-  FieldName, RefTable: string;
+  FieldName, BaseRef, RefTable, RefColumn: string;
 begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FBConn;
-    Q.SQL.Text := 'SELECT RDB$FIELD_NAME FROM RDB$RELATION_FIELDS WHERE RDB$RELATION_NAME = :T';
+    Q.SQL.Text :=
+      'SELECT TRIM(RDB$FIELD_NAME) ' +
+      'FROM RDB$RELATION_FIELDS ' +
+      'WHERE RDB$RELATION_NAME = :T';
     Q.ParamByName('T').AsString := UpperCase(TableName);
     Q.Open;
 
     while not Q.Eof do
     begin
       FieldName := Trim(Q.Fields[0].AsString);
+      BaseRef := '';
 
-      if FieldName.EndsWith('_ID') then
+      // ---------------------------
+      // Pattern 1: ID_<TABLE>
+      // ---------------------------
+      if FieldName.StartsWith('ID_') then
+        BaseRef := Copy(FieldName, 4, Length(FieldName));
+
+      // ---------------------------
+      // Pattern 2: <TABLE>_ID
+      // ---------------------------
+      if (BaseRef = '') and FieldName.EndsWith('_ID') then
+        BaseRef := Copy(FieldName, 1, Length(FieldName) - 3);
+
+      // ---------------------------
+      // Pattern 3: <TABLE>ID
+      // ---------------------------
+      if (BaseRef = '') and FieldName.ToUpper.EndsWith('ID') then
+        BaseRef := Copy(FieldName, 1, Length(FieldName) - 2);
+
+      // Nessun match → passa oltre
+      if BaseRef = '' then
       begin
-        RefTable := Copy(FieldName, 1, Length(FieldName) - 3);
+        Q.Next;
+        Continue;
+      end;
 
-        try
-          FBConn.ExecSQL(
-            'ALTER TABLE ' + FBIdent(TableName) +
-            ' ADD CONSTRAINT FK_' + FBIdent(TableName) + '_' + FBIdent(FieldName) +
-            ' FOREIGN KEY (' + FBIdent(FieldName) + ') REFERENCES ' + FBIdent(RefTable) + '(ID);'
-          );
+      // Risolvi tabella referenziata
+      RefTable := ResolveReferenceTable(FBConn, BaseRef);
 
-          Report.ForeignKeys.Add(FieldName + ' → ' + RefTable);
-          Report.Logs.Add('FK creata: ' + FieldName + ' → ' + RefTable);
-        except
-          Report.Errors.Add('FK fallita: ' + FieldName + ' → ' + RefTable);
-        end;
+      if RefTable = '' then
+      begin
+        Report.Errors.Add('Tabella referenziata non trovata: ' + BaseRef);
+        Q.Next;
+        Continue;
+      end;
+
+      // Recupera PK reale
+      RefColumn := GetPrimaryKeyColumn(FBConn, RefTable);
+
+      if RefColumn = '' then
+      begin
+        Report.Errors.Add('PK non trovata in ' + RefTable);
+        Q.Next;
+        Continue;
+      end;
+
+      // Evita FK duplicate
+      if ForeignKeyExists(FBConn, TableName, FieldName) then
+      begin
+        Report.Logs.Add('FK già esistente: ' + FieldName + ' → ' + RefTable);
+        Q.Next;
+        Continue;
+      end;
+
+      // ---------------------------
+      // Crea FK
+      // ---------------------------
+      try
+        FBConn.ExecSQL(
+          'ALTER TABLE ' + FBIdent(TableName) +
+          ' ADD CONSTRAINT FK_' + FBIdent(TableName) + '_' + FBIdent(FieldName) +
+          ' FOREIGN KEY (' + FBIdent(FieldName) + ') REFERENCES ' +
+          FBIdent(RefTable) + '(' + RefColumn + ');'
+        );
+
+        Report.ForeignKeys.Add(FieldName + ' → ' + RefTable + '(' + RefColumn + ')');
+        Report.Logs.Add('FK creata: ' + FieldName + ' → ' + RefTable + '(' + RefColumn + ')');
+      except
+        Report.Errors.Add('FK fallita: ' + FieldName + ' → ' + RefTable);
       end;
 
       Q.Next;
@@ -1141,6 +1263,8 @@ begin
     Q.Free;
   end;
 end;
+
+
 
 {----------------------------- SaveHTMLReport --------------------------------}
 procedure SaveHTMLReport(const FileName: string);
